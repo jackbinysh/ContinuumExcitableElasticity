@@ -1,7 +1,8 @@
 from ContinuumExcitableElasticity import pde
-from pde import CartesianGrid, Controller, MemoryStorage, ScalarField, FieldCollection, PlotTracker, ExplicitSolver,VectorField
+from pde import CartesianGrid, Controller, MemoryStorage, FileStorage, ScalarField, FieldCollection, PlotTracker, ExplicitSolver,VectorField
 import numpy as np
 import os
+import glob
 import json
 import sys 
 
@@ -29,14 +30,18 @@ eta=float(parameters[5])
 ko=float(parameters[6])
 mu_tilde=float(parameters[7])
 rho=float(parameters[8])
+gamma=0 # no friction currently
+
+bc='auto_periodic_dirichlet' #periodic or dirichlet depending on periodic=...
 
 ### DATA WRITE OUT ###
 
 # root folder for data
 #DataFolder='/mnt/jacb23-XDrive/Physics/ResearchProjects/ASouslov/RC-PH1229/ActiveElastocapillarity/2020-10-23-EnergyMinimization/'+"kc_"+"{0:0.1f}".format(kc)+"_alpha_"+"{0:0.2f}".format(MatNon)+"/"
-DataFolder="/home/jackbinysh/Code/ContinuumExcitableElasticity/Data/"
+DataFolder="/Users/jackbinysh/Code/ContinuumExcitableElasticity/Data/"
 # filepath for the data output
-filepath=
+# see https://github.com/zwicker-group/py-pde/discussions/39
+filepath=DataFolder+"Output.hdf5"
 
 # Name of the current file
 #ScriptName="EnergyMinimizationScript3D.py"
@@ -51,7 +56,7 @@ else:
     print ("Successfully created the directory %s " % DataFolder)
     
 # try and clear out the folder of vtk files and log files, if there was a previous run in it
-for filename in glob.glob(DataFolder+'*.vtk')+glob.glob(DataFolder+'*.log'):
+for filename in glob.glob(DataFolder+'*.hdf5')+glob.glob(DataFolder+'*.log'):
     file_path = os.path.join(DataFolder, filename)
     try:
         if os.path.isfile(file_path) or os.path.islink(file_path):
@@ -64,12 +69,16 @@ for filename in glob.glob(DataFolder+'*.vtk')+glob.glob(DataFolder+'*.log'):
 #Dump all the parameters to a file in the run folder        
 f=open(DataFolder+"Parameters.log","w+")
 datadict= { 
+        "T":T,
+        "L":L,
+        "Npts":Npts,
         "B":B,
         "mu":mu, 
         "eta":eta,
         "ko":ko,
-        "mu_tilde": mu_tilde 
+        "mu_tilde": mu_tilde, 
         "rho": rho
+        "bc":bc
 }
 json.dump(datadict,f)
 f.close()
@@ -85,7 +94,6 @@ qc=np.sqrt(( rho/(eta**2) )*( (J-((B/2)**2))/(mu+(B/2)) ))
 lamc=(2*np.pi)/qc
 
 # initialise the PDE
-bc='auto_periodic_dirichlet' #periodic or dirichlet depending on periodic=...
 eq = pde(B,mu,eta,ko,mu_tilde,gamma,rho,L, bc)
 
 # Initialise the Grid
@@ -110,17 +118,15 @@ sol1=initialstate # allow the possibility we will restart the simulation a few t
 ### GOGO! ###
 
 # initialise a file storage class
-#storage = MemoryStorage()
-storage = FileStorage(filepath)
-trackers = ['progress', 'consistency', storage.tracker(interval=pt) ]
+info={'grid':grid}
+storage=FileStorage(filepath,info)
+storagetracker=storage.tracker(interval=pt) 
+### OUTPUT ###
+trackers = ['progress', 'consistency', storagetracker]
 solver1 = ExplicitSolver(eq)
 controller1 = Controller(solver1, t_range=T, tracker=trackers)
 
-# overwrite the input sol1
 sol1 = controller1.run(sol1,dt=dt)
 print("Diagnostic information:")
 print(controller1.diagnostics)
-
-### OUTPUT ###
-
-
+storage.end_writing()
