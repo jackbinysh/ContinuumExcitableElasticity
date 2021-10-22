@@ -20,7 +20,7 @@ T=int(parameters[1]) # Run time
 Npts=int(parameters[2]) # number of points, its easier to do the math if this is odd
 
 h= L/(Npts-1) #derived grid spacing
-dt=1e-3 #timestep
+dt=5e-3 #timestep
 pt = 0.5 # Time interval for printing
 
 # Material Parameters
@@ -38,7 +38,7 @@ bc='auto_periodic_dirichlet' #periodic or dirichlet depending on periodic=...
 
 # root folder for data
 #DataFolder='/mnt/jacb23-XDrive/Physics/ResearchProjects/ASouslov/RC-PH1229/ActiveElastocapillarity/2020-10-23-EnergyMinimization/'+"kc_"+"{0:0.1f}".format(kc)+"_alpha_"+"{0:0.2f}".format(MatNon)+"/"
-DataFolder="/Users/jackbinysh/Code/ContinuumExcitableElasticity/Data/"
+DataFolder="/Users/jackbinysh/Code/ContinuumExcitableElasticity/Data/"+str(ko)+"/"
 # filepath for the data output
 # see https://github.com/zwicker-group/py-pde/discussions/39
 filepath=DataFolder+"Output.hdf5"
@@ -47,6 +47,9 @@ filepath=DataFolder+"Output.hdf5"
 #ScriptName="EnergyMinimizationScript3D.py"
 # Name of the file of functions used for this run
 #FunctionFileName="EnergyMinimization.py"
+# Dump an exact copy of this code into the data file
+#shutil.copyfile(ScriptName,DataFolder+ScriptName)
+#shutil.copyfile(FunctionFileName,DataFolder+FunctionFileName)
 
 try:
     os.mkdir(DataFolder)
@@ -77,17 +80,13 @@ datadict= {
         "eta":eta,
         "ko":ko,
         "mu_tilde": mu_tilde, 
-        "rho": rho
+        "rho": rho,
         "bc":bc
 }
 json.dump(datadict,f)
 f.close()
 
-# Dump an exact copy of this code into the data file
-#shutil.copyfile(ScriptName,DataFolder+ScriptName)
-#shutil.copyfile(FunctionFileName,DataFolder+FunctionFileName)
-
-### Some numbers its good to know ###
+### SOME NUMBERS IT IS GOOD TO KNOW ###
 J=ko**2
 ViscThresh=J-(B/2)**2
 qc=np.sqrt(( rho/(eta**2) )*( (J-((B/2)**2))/(mu+(B/2)) ))
