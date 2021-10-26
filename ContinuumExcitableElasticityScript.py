@@ -1,10 +1,11 @@
 from ContinuumExcitableElasticity import pde
-from pde import CartesianGrid, Controller, MemoryStorage, FileStorage, ScalarField, FieldCollection, PlotTracker, ExplicitSolver,VectorField
+from pde import CartesianGrid, Controller, MemoryStorage, FileStorage, ScalarField, FieldCollection, CallbackTracker, PlotTracker, ExplicitSolver,VectorField
 import numpy as np
 import os
 import glob
 import json
 import sys 
+from datetime import datetime
 
 ### DATA READ IN ###
 
@@ -20,8 +21,8 @@ T=int(parameters[1]) # Run time
 Npts=int(parameters[2]) # number of points, its easier to do the math if this is odd
 
 h= L/(Npts-1) #derived grid spacing
-dt=5e-3 #timestep
-pt = 0.5 # Time interval for printing
+dt=1e-3 #timestep
+pt=10 # Time interval for printing
 
 # Material Parameters
 B=float(parameters[3])
@@ -37,19 +38,12 @@ bc='auto_periodic_dirichlet' #periodic or dirichlet depending on periodic=...
 ### DATA WRITE OUT ###
 
 # root folder for data
-#DataFolder='/mnt/jacb23-XDrive/Physics/ResearchProjects/ASouslov/RC-PH1229/ActiveElastocapillarity/2020-10-23-EnergyMinimization/'+"kc_"+"{0:0.1f}".format(kc)+"_alpha_"+"{0:0.2f}".format(MatNon)+"/"
-DataFolder="/Users/jackbinysh/Code/ContinuumExcitableElasticity/Data/"+str(ko)+"/"
+DataFolder="/Users/jackbinysh/Code/ContinuumExcitableElasticity/Data/Test/"
 # filepath for the data output
 # see https://github.com/zwicker-group/py-pde/discussions/39
 filepath=DataFolder+"Output.hdf5"
-
-# Name of the current file
-#ScriptName="EnergyMinimizationScript3D.py"
-# Name of the file of functions used for this run
-#FunctionFileName="EnergyMinimization.py"
-# Dump an exact copy of this code into the data file
-#shutil.copyfile(ScriptName,DataFolder+ScriptName)
-#shutil.copyfile(FunctionFileName,DataFolder+FunctionFileName)
+# filepath for the log output
+logfilepath=DataFolder+"Output.log"
 
 try:
     os.mkdir(DataFolder)
@@ -89,6 +83,7 @@ f.close()
 ### SOME NUMBERS IT IS GOOD TO KNOW ###
 J=ko**2
 ViscThresh=J-(B/2)**2
+print(ViscThresh)
 qc=np.sqrt(( rho/(eta**2) )*( (J-((B/2)**2))/(mu+(B/2)) ))
 lamc=(2*np.pi)/qc
 
@@ -114,18 +109,33 @@ p_init= A*np.array([px_init,py_init])
 initialstate = FieldCollection([VectorField(grid,u_init),VectorField(grid,p_init)])
 sol1=initialstate # allow the possibility we will restart the simulation a few times.
 
-### GOGO! ###
+### INITIALISE TRACKERS ###
 
 # initialise a file storage class
-info={'grid':grid}
-storage=FileStorage(filepath,info)
+storage=FileStorage(filepath)
 storagetracker=storage.tracker(interval=pt) 
-### OUTPUT ###
-trackers = ['progress', 'consistency', storagetracker]
+# define a callback tracker to print some data to a file
+def mycallback(state,time):
+
+    logFile = open(logfilepath, 'a')
+    now = datetime.now()
+    current_time = now.strftime("%D:%H:%M")
+    print("T {T}".format(T=int(time))+" Current Time: "+current_time,file=logFile)
+    logFile.close()
+
+trackers = ['progress'
+            ,'consistency'
+            , storagetracker
+            , CallbackTracker(mycallback,interval=pt)]
+
+### GOGO! ###
 solver1 = ExplicitSolver(eq)
 controller1 = Controller(solver1, t_range=T, tracker=trackers)
-
 sol1 = controller1.run(sol1,dt=dt)
-print("Diagnostic information:")
-print(controller1.diagnostics)
+
+### SOME FINAL OUTPUT ###
 storage.end_writing()
+logFile = open(logfilepath, 'a')
+print("Diagnostic information:", file=logFile)
+print(controller1.diagnostics, file=logFile)
+logFile.close()
