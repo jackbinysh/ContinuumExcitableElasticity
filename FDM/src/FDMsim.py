@@ -5,12 +5,14 @@ from pde.tools.numba import jit
 import os
 import numba as nb
 import pickle as pickle
-
+import matplotlib.pyplot as plt
+import sys
 
 class NLOE2D_sim():
-    def __init__(self):
+    def __init__(self,parameters):
+        self.p=parameters
         pass
-                
+             
     def get_plist(self,p0,pname,pval,path):#make a list of parameter dicts for parameter sweeps
         dictlist=[]
         for v in pval:
@@ -23,31 +25,66 @@ class NLOE2D_sim():
             p['savefile']=','.join(filename)
             dictlist.append(p)
         return dictlist
+    
+    def get_initial_state(self):
+        Nx = self.p['Nx']
+        Ny = self.p['Ny']
+        Lx = self.p['Lx']
+        Ly = self.p['Ly']
+        amp = self.p['amp']
+        bounds=[(-Lx/2,Lx/2),(-Ly/2,Ly/2)]
+        shape=[Nx,Ny]
+        self.grid = CartesianGrid(bounds,shape, periodic=self.p['BC'])
+        self.init = amp*(np.random.rand(4,Nx,Ny)-0.5)
+        # initialstate = FieldCollection([VectorField(grid,u_init),VectorField(grid,p_init)])
 
+    
+    def DisplacementPDE(self):
+        self.get_initial_state()
+        self.init=FieldCollection([VectorField(self.grid,self.init[:2]),VectorField(self.grid,self.init[2:])])
+        self.runsim(self.p,'displacement')
+    
+    def StrainPDE(self):
+        self.get_initial_state()
+        self.init=FieldCollection([ScalarField(self.grid,np.vectorize(complex)(*self.init[:2]),dtype=complex),ScalarField(self.grid,np.vectorize(complex)(*self.init[2:]),dtype=complex)])
+        self.runsim(self.p,'strain')
+        
+        
+    def runsim(self,p,basis):
+        storage = MemoryStorage()
+        trackers = ['progress'    , 'consistency'  ,     storage.tracker(interval=self.p['pt']) ]
+        if basis=='displacement':
+            A=self.Displacement(self.p,self.init)
+        elif basis=='strain':
+            A=self.Strain(self.p,self.init)
+        sol = A.solve(self.init, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])
+        filename = self.p['savefolder']+self.p['savefile']
+        if not os.path.exists(self.p['savefolder']):
+            os.makedirs(self.p['savefolder'])
+        field =[]    
+        for j,i in storage.items():
+            field.append(np.array(i.data))
+        with open(filename, 'wb') as output:
+            p_ = p.copy()
+            if basis=='displacement':
+                field=np.moveaxis(np.asarray(field),0,1)
+                u = field[:2]
+                v = field[2:]
+                p_['u'] = u
+                p_['v'] = v
+            elif basis=='strain':
+                phi,phidot=np.moveaxis(np.asarray(field),0,1)
+                p_['phi']  = phi
+                p_['phidot'] = phidot
+            print('saved as:   ', filename)
+            pickle.dump(p_,output,pickle.HIGHEST_PROTOCOL)
+        
 
-    class Displacement(PDEBase):#
-        'displacement formulation'
-        def __init__(self,parameters):
-            self.p=parameters
-            pass
-        def get_initial_state(self):
-            'define your initial states here'
-            Nx = self.p['Nx']
-            Ny =self.p['Ny'] 
-            Lx =  self.p['Lx'] 
-            Ly = self.p['Ly']
-            amp = self.p['amp']
-            if self.p['IC']=='ran':
-                u_init=amp*np.random.rand(2,Nx,Ny)-0.5
-                p_init=amp*np.random.rand(2,Nx,Ny)-0.5
-            if self.p['IC'] == 'fuzz':
-                u_init=np.full((2,Nx,Ny),amp)+ amp**2 * np.random.rand(2,Nx,Ny)-0.5
-                p_init=np.zeros_like(u_init)
-            bounds=[(-Lx/2,Lx/2),(-Ly/2,Ly/2)]
-            shape=[Nx,Ny]
-            grid = CartesianGrid(bounds,shape, periodic=self.p['BC'])
-            initialstate = FieldCollection([VectorField(grid,u_init),VectorField(grid,p_init)])
-            return initialstate
+    class Displacement(PDEBase):
+        def __init__(self,p,state):
+            self.p=p
+            self.init=state
+        
         def evolution_rate(self, state, t=0):
             """"pure python"""
             u,p=state
@@ -72,62 +109,29 @@ class NLOE2D_sim():
             udot=p
             pdot=(ShearForce+OddForce+ViscousForce+NonLinearShearForce)
             return FieldCollection([VectorField(u.grid,udot),VectorField(p.grid,pdot)])
-        def runsim(self,p=[]):
-            if p!=[]:
-                self.p=p
-            
-            storage = MemoryStorage()
-            trackers = ['progress'    , 'consistency'  ,     storage.tracker(interval=self.p['pt']) ]
-            state = self.get_initial_state() #initial field for u,p
-            sol = self.solve(state, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])
-            field =[]
-            for j,i in storage.items():
-                field.append(np.array(i.data))
-            field=np.moveaxis(np.asarray(field),0,1)
-            u = field[:2]
-            v = field[2:]
-            print(np.shape(u))
-            filename = self.p['savefolder']+self.p['savefile']
-            if not os.path.exists(self.p['savefolder']):
-                os.makedirs(self.p['savefolder'])
-            with open(filename, 'wb') as output:
-                p_ = p.copy()
-                p_['u'] = u
-                p_['v'] = v
-                print('saved as:   ', filename)
-                pickle.dump(p_,output,pickle.HIGHEST_PROTOCOL)
-       
-    class Strain(PDEBase):
-        def __init__(self,parameters):
-            self.p=parameters
+        def _make_pde_rhs_numba(self, state):
+            #### This part is to speed up things ####
+            """ numba-compiled implementation of the PDE """
+            alpha,NL,Nx,Ny = self.p['alpha'],self.p['NL'],self.p['Nx'],self.p['Ny']
+            laplace = state.grid.get_operator("laplace", bc =self.p['BCtype'])
+            @nb.jit
+            def pde_rhs(state_data, t):
+                [ux,uy],[px,py] = state_data
+                rate = np.empty_like(state_data)
+                rate[0] = [px,py]
+                if NL == 'passive_cubic':
+                    
+                    rate[1] = laplace(ux+1j*alpha*uy + px + np.abs(ux)**2*ux)
+                return rate
+            return pde_rhs
+        
+        
+        
 
-        def get_initial_state(self):
-            Nx = self.p['Nx']
-            Ny =self.p['Ny'] 
-            Lx =  self.p['Lx'] 
-            Ly = self.p['Ly']        
-            amp = self.p['amp']
-            alpha = self.p['alpha']
-            nx = self.p['nx']
-            ny =self.p['ny'] 
-            if self.p['IC']=='ran':
-                ph0 = amp*(np.random.rand(Nx,Ny)-0.5 + 1j* (np.random.rand(Nx,Ny)-0.5))
-                phdot0 = amp*(np.random.rand(Nx,Ny)-0.5 + 1j* (np.random.rand(Nx,Ny)-0.5))
-                #constrain initial energy and momentum to be zero:
-            elif self.p['IC']=='sin':
-                mesh = np.meshgrid(np.arange(Ny),np.arange(Nx))
-                ampx = np.sqrt((alpha*Lx/(2*nx*np.pi))**2-1)
-                ampy = np.sqrt((alpha*Ly/(2*ny*np.pi))**2-1)
-                ph =  ampx * np.cos(2*np.pi *nx*mesh[0]/Nx) +ampy* 1j*np.cos(2*np.pi*ny*mesh[1]/Ny)
-                phdot0 = -1j*alpha*ph
-                #constrain initial energy and momentum to be zero:
-            ph0 = ph0 - np.average(ph0)
-            phdot0 = phdot0 - np.average(phdot0)    
-            bounds=[(-Lx/2,Lx/2),(-Ly/2,Ly/2)]
-            shape=[Nx,Ny]
-            grid = CartesianGrid(bounds,shape, periodic=self.p['BC'])
-            self.grid = grid
-            return FieldCollection([ScalarField(grid,ph0,dtype=complex),ScalarField(grid,phdot0,dtype=complex)])
+    class Strain(PDEBase):
+        def __init__(self,p,state):
+            self.p=p
+            self.init=state
 
         def evolution_rate(self, state, t=0):
             alpha,NL = self.p['alpha'],self.p['NL']
@@ -173,21 +177,3 @@ class NLOE2D_sim():
                 return rate
             return pde_rhs
         
-        def runsim(self,p):
-            storage = MemoryStorage()
-            trackers = ['progress'    , 'consistency'  ,     storage.tracker(interval=self.p['pt']) ]
-            state = self.get_initial_state() #initial field for phi,phidot
-            sol = self.solve(state, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])
-            field =[]
-            for j,i in storage.items():
-                field.append(np.array(i.data))
-            phi,phidot=np.moveaxis(np.asarray(field),0,1)
-            filename = self.p['savefolder']+self.p['savefile']
-            if not os.path.exists(self.p['savefolder']):
-                os.makedirs(self.p['savefolder'])
-            with open(filename, 'wb') as output:
-                p_ = p.copy()
-                p_['phi']  = phi
-                p_['phidot'] = phidot
-                print('saved as:   ', filename)
-                pickle.dump(p_,output,pickle.HIGHEST_PROTOCOL)
