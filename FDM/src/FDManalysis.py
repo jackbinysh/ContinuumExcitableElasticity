@@ -16,6 +16,7 @@ class NLOE2D_animate():
     def compute_qties(self):
         
         if 'u' in self.p.keys():
+            print('displacement')
             ux,uy=self.p['u']
             vx,vy=self.p['v']
             self.frames = len(ux)
@@ -25,6 +26,7 @@ class NLOE2D_animate():
             self.v_mag = np.abs(vx+1j*vy)
             self.FieldsToPlot = [self.u_angle,self.v_angle,self.u_mag,self.v_mag]
         elif 'phi' in self.p.keys():
+            print('strain')
             phi = self.p['phi']
             self.frames = len(phi)
             phidot = self.p['phidot']
@@ -56,7 +58,25 @@ class NLOE2D_animate():
             ax.set_title(label)
             plt.colorbar(self.ims[n],ax=ax)
         if save:
-            plt.savefig('final_state.pdf')
+            plt.savefig('output/final_state.pdf')
+            umag = self.FieldsToPlot[2]
+            vmag = self.FieldsToPlot[3]
+            fig,[ax,bx] = plt.subplots(2,2,figsize=(12,12),dpi=100)
+            
+            ax[0].scatter(np.arange(len(umag[-1,int(self.p['Ny']/2)])), umag[-1,int(self.p['Ny']/2)])
+            ax[0].scatter(np.arange(len(vmag[-1,int(self.p['Ny']/2)])), vmag[-1,int(self.p['Ny']/2)])
+            ax[1].scatter(np.arange(len(umag)), np.sum(umag,axis=(1,2))+np.sum(vmag,axis=(1,2)))
+            phi = self.FieldsToPlot[2] * np.exp(1j*self.FieldsToPlot[0])
+            dphi = self.FieldsToPlot[3] * np.exp(1j*self.FieldsToPlot[1])
+            self.f={}
+            self.f['Po'] =  np.real(dphi)*np.imag(phi) - np.imag(dphi) *np.real(phi) 
+            self.f['Pd'] = np.abs(dphi)**2
+            self.f['sumPo'] = np.sum(self.f['Po'],axis=(1,2))
+            self.f['sumPd'] = np.sum(self.f['Pd'],axis=(1,2))
+            bx[0].scatter(np.arange(len(umag)), self.f['sumPo'])
+            bx[1].scatter(np.arange(len(umag)), self.f['sumPd'])
+            
+            plt.savefig('output/cut'+self.p['savefile']+'.pdf')
         plt.tight_layout()
         self.axes=axes
     
@@ -70,7 +90,7 @@ class NLOE2D_animate():
             for n,[ax,im] in enumerate(zip(self.axes.flatten(),self.ims)):
                 f = self.FieldsToPlot[n][i]
                 im.set_array(f)
-                if n>1:
+                if n>-1:
                     vmin = np.min(f)
                     vmax = np.max(f)
                     im.set_clim(vmin, vmax)

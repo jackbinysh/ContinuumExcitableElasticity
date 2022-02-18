@@ -17,6 +17,7 @@ class Job():
             sim.DisplacementPDE()
         anim  = NLOE2D_animate(self.p['savefolder']+self.p['savefile'])
         anim.animate_fields('output/',self.p['savefile'])
+        anim.get_final_state()
 
     def Sweep(self,prange,pname,cores=1,subfolder='test',basis ='strain'):
         'Sweep over a n-D parameter range with values prange over parameters pname.'
@@ -37,19 +38,19 @@ class Job():
         if __name__ ==  '__main__':
             main()
 
-parameters = {'tf':1., #total time
-              'pt':0.2,#print interval
-              'dt':2e-4,#integration step
+parameters = {'tf':50, #total time
+              'pt':0.5,#print interval
+              'dt':0.5e-4,#integration step
               'alpha':10,#model parameter
               'Lx':1,#boxsize
-              'Ly':1,#boxsize
-              'Nx':31,#spatial discretization
-              'Ny':31,#spatial discretization
+              'Ly':1.25,#boxsize
+              'Nx':40,#spatial discretization
+              'Ny':50,#spatial discretization
               'nx':4,#initial condition mode (sine wave)
               'ny':4,#initial condition mode (sine wave)
               'amp':1e-3,#initial field amplitude
-              'BC':[False,False], #Boundary conditions in x and y directions, True = periodical 
-              'BCtype': 'auto_periodic_dirichlet',
+              'BC':[True,True], #Boundary conditions in x and y directions, True = periodical 
+              'BCtype': 'auto_periodic_neumann',
               'NL':'passive_cubic',#NL type: choose 'active_bilinear' or 'passive_cubic'
               'IC':'ran',#initial conditions: 'ran' for random, 'sin', for sinusoidal
               'savefolder':'data/',#folder where data is stored
@@ -59,16 +60,17 @@ parameters = {'tf':1., #total time
 
 
 #single run
-np.random.seed()
-parameters['savefile'] = 'disp'
-J = Job(parameters)
-J.SingleRun(basis ='displacement')
-
-parameters['savefile'] = 'strain' 
-J = Job(parameters)
-J.SingleRun(basis ='strain')
+# parameters['savefile'] = 'disp'
+# J = Job(parameters)
+# J.SingleRun(basis ='displacement')
 
 
+for i in np.arange(4):
+    parameters['savefile'] = f'strain {i}' 
+    J = Job(parameters)
+    J.SingleRun(basis ='strain')
+
+# 
 
 #parameter sweep
 sweep=False

@@ -1,6 +1,6 @@
 
-output/.DS_Store
-data/.DS_Store
+output
+data
 FDM/.DS_Store
 FDM/src/.DS_Store
 .DS_Store
