@@ -64,9 +64,9 @@ class NLOE2D_sim():
             print('running strain simulation')
             A=self.Strain(self.p,self.init)
         sol = A.solve(self.init, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])
-        filename = self.p['savefolder']+self.p['savefile']
-        if not os.path.exists(self.p['savefolder']):
-            os.makedirs(self.p['savefolder'])
+        filename = self.p['savefolder']+self.p['subfolder']+self.p['savefile']
+        if not os.path.exists(self.p['savefolder']+self.p['subfolder']):
+            os.makedirs(self.p['savefolder']+self.p['subfolder'])
         field =[]    
         for j,i in storage.items():
             field.append(np.array(i.data))

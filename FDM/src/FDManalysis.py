@@ -8,13 +8,54 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.colors import Normalize
 
-class NLOE2D_animate():
+class NLOE2D_analysis():
     def __init__(self,path):
         with open(path, 'rb') as output:
             self.p = pickle.load(output)
 
-    def compute_qties(self):
+
         
+    def track_defects(self,th):
+        nbMat = np.zeros((np.shape(th)[0],8,self.p['Nx'],self.p['Ny']))
+        nb = np.asarray([[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]])        
+        for n,i in enumerate(nb):
+            nbMat[:,n] = np.roll(np.roll(th,i[0],axis=1),i[1],axis=2)
+        nbMat = nbMat[:,:,1:-1,1:-1]
+        difMat = (nbMat - np.roll(nbMat,1,axis=1))%np.pi/2
+        defectMat = np.sum(difMat,axis=1)
+        defectMat += - 2*np.pi
+        defectMat[np.abs(defectMat)<np.pi+0.1]=0
+        self.defectMat =defectMat
+
+        plus=[]
+        minus=[]
+        for t in defectMat:
+            plus.append(np.count_nonzero(t>0))
+            minus.append(np.count_nonzero(t<0))
+        self.plus=np.asarray(plus)
+        self.minus=np.asarray(minus)
+        self.defects = self.plus+self.minus
+        self.defects = self.defects/np.max(self.defects)
+        
+        
+        plot=False
+        if plot:
+            fig,ax = plt.subplots(1,3,figsize=(12,6))
+            ax[0].set_yscale('log')
+            ax[2].set_yscale('log')
+            ax[0].scatter(np.arange(len(plus)),plus,s=1)
+            ax[0].scatter(np.arange(len(plus)),minus,s=1)
+            ax[1].scatter(np.arange(len(plus)),self.minus-self.plus,s=1)
+            ax[2].scatter(np.arange(len(plus)),self.defects,s=1)
+            plt.show()
+            
+        
+        
+
+
+
+
+    def compute_qties(self):
         if 'u' in self.p.keys():
             print('displacement')
             ux,uy=self.p['u']
@@ -30,6 +71,8 @@ class NLOE2D_animate():
             phi = self.p['phi']
             self.frames = len(phi)
             phidot = self.p['phidot']
+            self.S1=np.real(phi)
+            self.S2=np.imag(phi)
             self.argphi = np.angle(phi)
             self.modphi = np.abs(phi)
             self.argphidot = np.angle(phidot)
@@ -38,8 +81,17 @@ class NLOE2D_animate():
             self.momentum = np.abs(np.sum(phi,axis=(1,2)))**2
             self.energy = np.sum(self.density,axis=(1,2))
             self.error = self.momentum/self.energy
-            self.FieldsToPlot = [self.argphi,self.argphidot,self.modphi,self.modphidot]
+            
+            # self.track_defects(th=np.angle(self.S1-np.sqrt(self.S1**2+self.S2**2 + 1j*self.S2))%np.pi)
+            # theta = np.angle(S1 - np.sqrt(S1**2 + S2**2) +1j*S2)%np.pi
+            self.track_defects(th=np.angle(np.sqrt((self.S1+1j*self.S2)/self.modphi))%np.pi)
+            self.FieldsToPlot = [self.argphi,self.defectMat,self.modphi,self.modphidot]
         self.times = np.arange(self.frames)*self.p['pt']
+        
+        
+        
+        
+        
             
     def get_frame(self,f=-1,save=False):
         self.compute_qties()
