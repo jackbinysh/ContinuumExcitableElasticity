@@ -14,8 +14,6 @@ class NLOE2D_analysis():
             with open(path, 'rb') as output:
                 self.p = pickle.load(output)
 
-
-        
     def track_defects(self,th):
         nbMat = np.zeros((np.shape(th)[0],8,self.p['Nx'],self.p['Ny'])) 
         nb = np.asarray([[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]) # 3x3 window
@@ -26,19 +24,10 @@ class NLOE2D_analysis():
         difMat = (nbMat - np.roll(nbMat,1,axis=1))%(2*np.pi)
         defectMat = np.sum(difMat,axis=1)
         defectMat += - 8*np.pi
-        
-
-        defectMat[np.abs(defectMat)<5*np.pi]=0
-        
+        defectMat[np.abs(defectMat)<5*np.pi]=0        
         self.defectMat = defectMat/(2*np.pi)
         self.defects = np.nonzero(defectMat)
         self.charges= defectMat[defectMat != 0]
-
-
-        
-        
-    
-        
 
 
     def compute_qties(self):
@@ -74,9 +63,7 @@ class NLOE2D_analysis():
         self.times = np.arange(self.frames)*self.p['pt']
         
         
-        
-        
-        
+
             
     def get_frame(self,f=-1,save=False):
         self.compute_qties()
