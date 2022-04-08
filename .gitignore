@@ -4,3 +4,4 @@ data
 FDM/.DS_Store
 FDM/src/.DS_Store
 .DS_Store
+__pycache__/
