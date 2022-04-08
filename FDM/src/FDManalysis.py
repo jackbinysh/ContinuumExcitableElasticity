@@ -1,58 +1,44 @@
+from re import S
 import numpy as np
-from pde import CartesianGrid, MemoryStorage, ScalarField, FieldCollection, PDEBase, VectorField
-from pde.tools.numba import jit
-import os
-import numba as nb
+import os,sys
 import pickle as pickle
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.colors import Normalize
+
 
 class NLOE2D_analysis():
     def __init__(self,path):
-        with open(path, 'rb') as output:
-            self.p = pickle.load(output)
+        if type(path) is dict:
+            self.p = path
+        else:
+            with open(path, 'rb') as output:
+                self.p = pickle.load(output)
 
 
         
     def track_defects(self,th):
-        nbMat = np.zeros((np.shape(th)[0],8,self.p['Nx'],self.p['Ny']))
-        nb = np.asarray([[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]])        
+        nbMat = np.zeros((np.shape(th)[0],8,self.p['Nx'],self.p['Ny'])) 
+        nb = np.asarray([[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]) # 3x3 window
+        
         for n,i in enumerate(nb):
             nbMat[:,n] = np.roll(np.roll(th,i[0],axis=1),i[1],axis=2)
         nbMat = nbMat[:,:,1:-1,1:-1]
-        difMat = (nbMat - np.roll(nbMat,1,axis=1))%np.pi/2
+        difMat = (nbMat - np.roll(nbMat,1,axis=1))%(2*np.pi)
         defectMat = np.sum(difMat,axis=1)
-        defectMat += - 2*np.pi
-        defectMat[np.abs(defectMat)<np.pi+0.1]=0
-        self.defectMat =defectMat
-
-        plus=[]
-        minus=[]
-        for t in defectMat:
-            plus.append(np.count_nonzero(t>0))
-            minus.append(np.count_nonzero(t<0))
-        self.plus=np.asarray(plus)
-        self.minus=np.asarray(minus)
-        self.defects = self.plus+self.minus
-        self.defects = self.defects/np.max(self.defects)
-        
-        
-        plot=False
-        if plot:
-            fig,ax = plt.subplots(1,3,figsize=(12,6))
-            ax[0].set_yscale('log')
-            ax[2].set_yscale('log')
-            ax[0].scatter(np.arange(len(plus)),plus,s=1)
-            ax[0].scatter(np.arange(len(plus)),minus,s=1)
-            ax[1].scatter(np.arange(len(plus)),self.minus-self.plus,s=1)
-            ax[2].scatter(np.arange(len(plus)),self.defects,s=1)
-            plt.show()
-            
-        
+        defectMat += - 8*np.pi
         
 
+        defectMat[np.abs(defectMat)<5*np.pi]=0
+        
+        self.defectMat = defectMat/(2*np.pi)
+        self.defects = np.nonzero(defectMat)
+        self.charges= defectMat[defectMat != 0]
 
+
+        
+        
+    
+        
 
 
     def compute_qties(self):
@@ -65,7 +51,8 @@ class NLOE2D_analysis():
             self.v_angle = np.angle(vx+1j*vy)
             self.u_mag = np.abs(ux+1j*uy)
             self.v_mag = np.abs(vx+1j*vy)
-            self.FieldsToPlot = [self.u_angle,self.v_angle,self.u_mag,self.v_mag]
+            self.track_defects(th=self.u_angle)
+            self.FieldsToPlot = [self.u_angle,self.defectMat,self.u_mag]
         elif 'phi' in self.p.keys():
             print('strain')
             phi = self.p['phi']
@@ -81,11 +68,9 @@ class NLOE2D_analysis():
             self.momentum = np.abs(np.sum(phi,axis=(1,2)))**2
             self.energy = np.sum(self.density,axis=(1,2))
             self.error = self.momentum/self.energy
-            
-            # self.track_defects(th=np.angle(self.S1-np.sqrt(self.S1**2+self.S2**2 + 1j*self.S2))%np.pi)
-            # theta = np.angle(S1 - np.sqrt(S1**2 + S2**2) +1j*S2)%np.pi
-            self.track_defects(th=np.angle(np.sqrt((self.S1+1j*self.S2)/self.modphi))%np.pi)
-            self.FieldsToPlot = [self.argphi,self.defectMat,self.modphi,self.modphidot]
+            self.dispbasis = np.angle(np.sqrt((self.S1+1j*self.S2)/self.modphi))%np.pi
+            self.track_defects(th=self.dispbasis)
+            self.FieldsToPlot = [self.argphi,self.defectMat,self.modphi]
         self.times = np.arange(self.frames)*self.p['pt']
         
         
@@ -96,17 +81,20 @@ class NLOE2D_analysis():
     def get_frame(self,f=-1,save=False):
         self.compute_qties()
         plt.rcParams.update({'font.size': 8})
-        self.fig,axes = plt.subplots(2,2,figsize=(6,6),dpi=100)  
-        self.cmaps = ['hsv','hsv','viridis','viridis']
+        self.fig,axes = plt.subplots(1,3,figsize=(12,4),dpi=100)  
+        self.cmaps = ['hsv','RdBu','viridis']
         self.ims = [ax.imshow(self.FieldsToPlot[n][f],cmap = cmap,aspect='equal') for n,[ax,cmap] in enumerate(zip(axes.flatten(),self.cmaps))]
         plt.suptitle(f'{self.p["NL"]} NL \n'+f'($L_x={self.p["Lx"]},L_y={self.p["Ly"]},N_x={self.p["Nx"]},N_y={self.p["Ny"]}, \\alpha={self.p["alpha"]}$)')    
         self.ims = []
-        
-        for n,[cmap,field,ax,label] in enumerate(zip(self.cmaps,self.FieldsToPlot,axes.flatten(),['angle', 'angle dot','mag','mag dot'])):    
-            if cmap == 'viridis':
-                self.ims.append(ax.imshow(field[f],cmap=cmap,aspect='equal',vmin=np.min(field[f]),vmax=np.max(field[f])))
-            elif cmap == 'hsv':
+        for n,[cmap,field,ax,label] in enumerate(zip(self.cmaps,self.FieldsToPlot,axes.flatten(),['$\\phi$', 'defects','mag'])):    
+            if n==0:
                 self.ims.append(ax.imshow(field[f],cmap=cmap,aspect='equal',vmin=-np.pi,vmax=np.pi))
+            # if n==0:
+            #     self.ims.append(ax.imshow(field[f],cmap=cmap,aspect='equal',vmin=0,vmax=np.pi))
+            elif cmap == 'viridis':
+                self.ims.append(ax.imshow(field[f],cmap=cmap,aspect='equal',vmin=np.min(field[f]),vmax=np.max(field[f])))
+            elif cmap == 'RdBu':
+                self.ims.append(ax.imshow(field[f],cmap=cmap,aspect='equal',vmin=np.min(field),vmax=np.max(field)))
             ax.set_title(label)
             plt.colorbar(self.ims[n],ax=ax)
         if save:
@@ -142,7 +130,7 @@ class NLOE2D_analysis():
             for n,[ax,im] in enumerate(zip(self.axes.flatten(),self.ims)):
                 f = self.FieldsToPlot[n][i]
                 im.set_array(f)
-                if n>-1:
+                if n>1:
                     vmin = np.min(f)
                     vmax = np.max(f)
                     im.set_clim(vmin, vmax)

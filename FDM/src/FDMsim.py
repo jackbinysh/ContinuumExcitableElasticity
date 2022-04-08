@@ -1,28 +1,24 @@
 
 import numpy as np
-from pde import CartesianGrid, MemoryStorage, ScalarField, FieldCollection, PDEBase, VectorField,Boundaries
+from pde import CartesianGrid, MemoryStorage, ScalarField, FieldCollection, PDEBase, VectorField
 from pde.tools.numba import jit
 import os
 import numba as nb
 import pickle as pickle
 import matplotlib.pyplot as plt
 import sys
-
+from src.FDManalysis import NLOE2D_analysis
 class NLOE2D_sim():
     def __init__(self,parameters):
         self.p=parameters
         pass
              
-    def get_plist(self,p0,pname,pval,path):#make a list of parameter dicts for parameter sweeps
+    def get_plist(self,p0,pname,prange):#make a list of parameter dicts for parameter sweeps
         dictlist=[]
-        for v in pval:
+        for v in prange:
             p = p0.copy()
-            filename = []
             for n,i in enumerate(pname):
-                p[i] = v[n]
-                filename.append(str(v[n]))
-            p['dpath'] = path
-            p['savefile']=','.join(filename)
+                p[i] = v
             dictlist.append(p)
         return dictlist
     
@@ -42,28 +38,30 @@ class NLOE2D_sim():
 
         
     
-    def DisplacementPDE(self):
+    def DisplacementPDE(self,p):
+        self.p=p
         self.get_initial_state()
         self.init=FieldCollection([VectorField(self.grid,self.init[:2]),VectorField(self.grid,self.init[2:])])
-        self.runsim(self.p,'displacement')
+        self.runsim(basis='displacement',save=self.p['data_output'])
     
-    def StrainPDE(self):
+    def StrainPDE(self,p):
+        self.p=p
         self.get_initial_state()
         self.init=FieldCollection([ScalarField(self.grid,np.vectorize(complex)(*self.init[:2]),dtype=complex),ScalarField(self.grid,np.vectorize(complex)(*self.init[2:]),dtype=complex)])
-        self.runsim(self.p,'strain')
+        self.runsim('strain',save=self.p['data_output'])
         
         
-    def runsim(self,p,basis):
+    def runsim(self,basis='strain',save='defect'):
+        p=self.p
         storage = MemoryStorage()
         trackers = ['progress'    , 'consistency'  ,     storage.tracker(interval=self.p['pt']) ]
         if basis=='displacement':
             print('running displacement simulation')
-            
             A=self.Displacement(self.p,self.init)
         elif basis=='strain':
             print('running strain simulation')
             A=self.Strain(self.p,self.init)
-        sol = A.solve(self.init, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])
+        sol = A.solve(self.init, t_range=self.p['tf'],tracker=trackers,adaptive=True)#dt=self.p['dt'])
         filename = self.p['savefolder']+self.p['subfolder']+self.p['savefile']
         if not os.path.exists(self.p['savefolder']+self.p['subfolder']):
             os.makedirs(self.p['savefolder']+self.p['subfolder'])
@@ -71,6 +69,8 @@ class NLOE2D_sim():
         for j,i in storage.items():
             field.append(np.array(i.data))
         with open(filename, 'wb') as output:
+            
+            
             p_ = p.copy()
             if basis=='displacement':
                 field=np.moveaxis(np.asarray(field),0,1)
@@ -78,13 +78,23 @@ class NLOE2D_sim():
                 v = field[2:]
                 p_['u'] = u
                 p_['v'] = v
+                p['times'] = len(u[0])
             elif basis=='strain':
                 phi,phidot=np.moveaxis(np.asarray(field),0,1)
                 p_['phi']  = phi
                 p_['phidot'] = phidot
+                p['times'] = len(phi)
             print('saved as:   ', filename)
-            pickle.dump(p_,output,pickle.HIGHEST_PROTOCOL)
-        
+            if save=='all':
+                pickle.dump(p_,output,pickle.HIGHEST_PROTOCOL)
+            elif save=='defects':
+                self.A  = NLOE2D_analysis(p_)
+                self.A.compute_qties()
+                p_=p.copy()
+                p['defects'] = self.A.defects
+                p['charges'] = self.A.charges                
+                data = p
+                pickle.dump(data,output,pickle.HIGHEST_PROTOCOL)
 
     class Displacement(PDEBase):
         def __init__(self,p,state):
