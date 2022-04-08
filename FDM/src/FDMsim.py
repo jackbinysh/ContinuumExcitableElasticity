@@ -125,57 +125,91 @@ class NLOE2D_sim():
             udot=p
             pdot=(ShearForce+OddForce+ViscousForce+NonLinearShearForce)
             return FieldCollection([VectorField(u.grid,udot),VectorField(p.grid,pdot)])
-        
-        # # failed attempt to speed up with numba
-        # def _make_pde_rhs_numba(self, state):
-        #     alpha,NL,Nx,Ny = self.p['alpha'],self.p['NL'],self.p['Nx'],self.p['Ny']
-        #     def sym_operator(bcs: Boundaries):#factory function
-        #         def make_symmetric(bcs,diuj):          #operator
-        #             return diuj.symmetrize(make_traceless=True)
-        #         return make_symmetric
-        #     def square_operator(bcs: Boundaries):#factory function
-        #         def dot_tensor(bcs,Sij):          #operator
-        #             return Sij.dot(Sij)
-        #         return dot_tensor
-        #     def trace_operator(bcs: Boundaries):#factory function
-        #         def trace(S2):          #operator
-        #             return S2.trace()
-        #         return trace
-        #     u,p = state
-        #     u.grid.register_operator("sym_operator",factory_func = sym_operator,rank_in =2,rank_out=2)
-        #     u.grid.register_operator("dot_tensor",factory_func = square_operator,rank_in =2,rank_out=2)
-        #     u.grid.register_operator("trace",factory_func = trace_operator,rank_in =2,rank_out=1)
-        #     apply_laplace = u.grid.make_operator('vector_laplace', self.p['BCtype'])
-        #     apply_laplace = p.grid.make_operator('vector_laplace', self.p['BCtype'])
-        #     apply_grad= u.grid.make_operator('gradient', self.p['BCtype'])
-        #     apply_div = u.grid.make_operator('divergence', self.p['BCtype'])
-        #     apply_sym = u.grid.make_operator('sym_operator', self.p['BCtype'])
-        #     apply_square = u.grid.make_operator('dot_tensor', self.p['BCtype'])
-        #     apply_trace = u.grid.make_operator('trace', self.p['BCtype'])
-        #     @nb.jit
-        #     def pde_rhs(state_data, t):
-        #         u,p = state_data
-        #         lapu=apply_laplace(u) 
-        #         lapp=apply_laplace(p) 
-        #         ShearForce= lapu
-        #         ViscousForce= lapp
-        #         
-        #         gradu=apply_grad(u)
-        #         Sij = apply_sym(gradu)
-        #         S2 = apply_square(Sij)
-        #         trS2 = apply_trace(S2)
-        #         
-        #         if NL == 'passive_cubic':
-        #             OddForce=alpha*[lapu[1],-lapu[0]]
-        #             NonLinearShearForce = apply_div(trS2)
-        #         rate = np.empty_like(state_data)
-        #         rate[0] = p
-        #         rate[1] = ShearForce+OddForce+ViscousForce+NonLinearShearForce
-        #         return rate
-        #     return pde_rhs
-        
-        
-        
+            
+            
+        def _make_pde_rhs_numba(self, state):
+            #numba-compiled implementation of the PDE
+            mu=1
+            B=0
+            ko=self.p['alpha']
+            eta=1
+            mu_tilde=1
+            rho=1
+            
+            # make the operators
+            apply_laplace = state.grid.make_operator('vector_laplace',self.p['BCtype'] )
+            apply_divergence = state.grid.make_operator('divergence',self.p['BCtype'] )
+            apply_tensor_divergence = state.grid.make_operator('tensor_divergence',self.p['BCtype'] )
+            apply_gradient = state.grid.make_operator('gradient',self.p['BCtype'] )
+            apply_vector_gradient =state.grid.make_operator('vector_gradient',self.p['BCtype'] )
+            
+            # some things for the jit
+            d=len(state.grid.shape)
+            #https://py-pde.readthedocs.io/en/latest/_modules/pde/fields/tensorial.html?highlight=transpose#
+            axes = (1, 0) + tuple(range(2, 2 + state.grid.num_axes)) # for tranposing
+
+            @nb.jit
+            def pde_rhs(state_data, t):
+                
+                u = state_data[0:2,:,:]
+                p = state_data[2:4,:,:]
+                
+                # apply all the operators
+                lapu= apply_laplace(u) # vector laplacian of the displacement
+                
+                divu= apply_divergence(u)
+                graddivu=apply_gradient(divu)  # grad(div) of the displacement
+                lapp=apply_laplace(p)   # vector laplacian of the velocity
+
+                ### linear parts ###
+                # shear force
+                ShearForce= mu*lapu
+                #bulk force
+                BulkForce=B*graddivu 
+                # Odd force 
+                lapustar=np.copy(lapu)
+                lapustar[0,:,:]=lapu[1,:,:]
+                lapustar[1,:,:]=-lapu[0,:,:]
+                OddForce=ko*lapustar
+                #viscous force
+                ViscousForce=eta*lapp
+
+                # Adding the divergence of the nonlinear shear stress, d_j ( (S_kl S_kl)S_ij )
+                diuj= apply_vector_gradient(u) 
+                S_ij=0.5*(diuj+np.transpose(diuj,axes)) # symmetrize
+
+                # time to get low level
+                # Make the strain traceless
+                for k in range(S_ij.shape[2]):
+                    for l in range(S_ij.shape[3]):
+                        trace= S_ij[0,0,k,l] + S_ij[1,1,k,l]
+                        S_ij[0,0,k,l]= S_ij[0,0,k,l]-(1/d)*trace
+                        S_ij[1,1,k,l]= S_ij[1,1,k,l]-(1/d)*trace
+
+                # Now compute the nonlinear term  
+                ModSsqS=np.copy(S_ij)
+                for k in range(S_ij.shape[2]):
+                    for l in range(S_ij.shape[3]):
+                        # we are sitting at a point (k,l) in space. Now get |S|^2, and multiply it into S
+                        # at every data point, get |S^2|S
+                        ssq=0
+                        for i in range(S_ij.shape[0]):
+                            for j in range(S_ij.shape[1]):
+                                ssq+=S_ij[i,j,k,l]*S_ij[i,j,k,l] # this guy is symmetric so the order doesnt matter
+
+                        # now multiply it in, to get our final answer
+                        for i in range(S_ij.shape[0]):
+                            for j in range(S_ij.shape[1]):
+                                ModSsqS[i,j,k,l]= ssq*S_ij[i,j,k,l]
+
+                NonLinearShearForce=mu_tilde*apply_tensor_divergence(ModSsqS)
+                
+                rate = np.empty_like(state_data)
+                rate[0:2]=p
+                rate[2:4]=(1/rho)*(BulkForce+ShearForce+OddForce+ViscousForce+NonLinearShearForce) 
+                return rate
+
+            return pde_rhs
 
     class Strain(PDEBase):
         def __init__(self,p,state):
@@ -226,3 +260,21 @@ class NLOE2D_sim():
                 return rate
             return pde_rhs
         
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     
