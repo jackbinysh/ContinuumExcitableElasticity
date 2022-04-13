@@ -9,12 +9,12 @@ import matplotlib.cm as cm
     
 parameters = {'tf':1., #total time
               'pt':0.01,#print interval
-              'dt':0.05e-4,#integration step
+              'dt':0.1e-4,#integration step
               'alpha':600,#model parameter
               'Lx':1,#boxsize
               'Ly':1,#boxsize
-              'Nx':40,#spatial discretization
-              'Ny':40,#spatial discretization
+              'Nx':20,#spatial discretization
+              'Ny':20,#spatial discretization
               'nx':4,#initial condition mode (sine wave)
               'ny':4,#initial condition mode (sine wave)
               'amp':1e-3,#initial field amplitude
@@ -26,7 +26,9 @@ parameters = {'tf':1., #total time
               'subfolder': 'alpha=600/',#subfolder parameter value
               'savefile':'test', #filename of pickle data file
               'data_output':'all',#'all' for full timeseries, 'defects' for defect data only
-              'basis': 'strain' #'dislacement' or 'strain'
+              'basis': 'strain', #'dislacement' or 'strain'
+              'Fields to Plot': ['argu','defectfield','absu'],
+              'Colormaps': ['hsv','RdBu','viridis']
               }
 
 
@@ -64,8 +66,6 @@ SingleRun(parameters)
 
 
 # Run multiple simulations over a range of parameters
-
-
 # pname = 'alpha' #parameter to sweep over
 # prange = [600]  #range to sweep over
 # n=4             #number of runs

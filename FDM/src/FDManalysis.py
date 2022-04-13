@@ -16,7 +16,9 @@ class NLOE2D_analysis():
             self.load(path)
             
     def load(self,path):
+        
         with open(path, 'rb') as output:
+            print(output)
             self.p = pickle.load(output)
 
     def analyze_defects(self):
@@ -52,46 +54,48 @@ class NLOE2D_analysis():
         defectMat = np.sum(difMat,axis=1)
         defectMat += - 8*np.pi
         defectMat[np.abs(defectMat)<5*np.pi]=0        
-        self.defectMat = defectMat/(2*np.pi)
         defects = np.nonzero(defectMat)
         charges= defectMat[defectMat != 0]
+        self.results['defectfield'] = defectMat/(2*np.pi)
         self.results['defects'] = defects
         self.results['charges'] = charges
 
     def compute_qties(self):
-        if 'u' in self.p.keys():
+        
+        if self.p['basis'] == 'displacement':
             print('displacement')
             ux,uy=self.p['u']
             vx,vy=self.p['v']
-            self.frames = len(ux)
-            self.u_angle = np.angle(ux+1j*uy)
-            self.v_angle = np.angle(vx+1j*vy)
-            self.u_mag = np.abs(ux+1j*uy)
-            self.v_mag = np.abs(vx+1j*vy)
-            self.track_defects(th=self.u_angle)
-            self.analyze_defects()
-            self.FieldsToPlot = [self.u_angle,self.defectMat,self.u_mag]
-        elif 'phi' in self.p.keys():
+            u=ux+1j*uy
+            v=vx+1j*vy
+        if self.p['basis'] == 'strain':
             print('strain')
-            phi = self.p['phi']
-            self.frames = len(phi)
-            phidot = self.p['phidot']
-            self.S1=np.real(phi)
-            self.S2=np.imag(phi)
-            self.argphi = np.angle(phi)
-            self.modphi = np.abs(phi)
-            self.argphidot = np.angle(phidot)
-            self.modphidot = np.abs(phidot)
-            self.density = self.modphi**2
-            self.momentum = np.abs(np.sum(phi,axis=(1,2)))**2
-            self.energy = np.sum(self.density,axis=(1,2))
-            self.error = self.momentum/self.energy
-            self.dispbasis = np.angle(np.sqrt((self.S1+1j*self.S2)/self.modphi))%np.pi
-            self.track_defects(th=self.dispbasis)
-            self.analyze_defects()
-            self.FieldsToPlot = [self.argphi,self.defectMat,self.modphi]
-        self.times = np.arange(self.frames)*self.p['pt']
+            u = self.p['u']
+            v = self.p['v']
+            
+        self.results['frames'] = len(u)
+        self.results['argu'] = np.angle(u)
+        self.results['argv'] = np.angle(v)
+        self.results['absu'] = np.abs(u)
+        self.results['absv'] = np.abs(v)
+        self.results['Re(u)'] = np.real(u)
+        self.results['Im(u)'] = np.imag(u)
+        self.results['Re(u)'] = np.real(v)
+        self.results['Re(u)'] = np.imag(v)
+        self.results['|u|^2'] = self.results['absu']**2
+        self.results['momentum'] = np.abs(np.sum(u,axis=(1,2)))**2
+        self.results['energy'] = np.sum(self.results['|u|^2'],axis=(1,2))
+        self.results['error'] = self.results['momentum']/self.results['energy']
+        self.results['defectfield'] = self.results['argu']
         
+        if self.p['basis'] == 'strain':
+            self.results['defectfield'] = np.angle(np.sqrt((self.results['Re(u)']+1j*self.results['Im(u)'])/self.results['absu']))%np.pi
+        elif self.p['basis'] == 'strain':
+            self.results['defectfield'] = self.results['argu']
+            
+        self.track_defects(th=self.results['defectfield'])                
+        self.times = np.arange(self.results['frames'])*self.p['pt']
+        self.FieldsToPlot = [self.results[f] for f in self.p['Fields to Plot']]   #   [self.u_angle,self.defectMat,self.u_mag]
         
 
             
@@ -99,11 +103,10 @@ class NLOE2D_analysis():
         self.compute_qties()
         plt.rcParams.update({'font.size': 8})
         self.fig,axes = plt.subplots(1,3,figsize=(12,4),dpi=100)  
-        self.cmaps = ['hsv','RdBu','viridis']
-        self.ims = [ax.imshow(self.FieldsToPlot[n][f],cmap = cmap,aspect='equal') for n,[ax,cmap] in enumerate(zip(axes.flatten(),self.cmaps))]
-        plt.suptitle(f'{self.p["NL"]} NL \n'+f'($L_x={self.p["Lx"]},L_y={self.p["Ly"]},N_x={self.p["Nx"]},N_y={self.p["Ny"]}, \\alpha={self.p["alpha"]}$)')    
+        self.ims = [ax.imshow(self.FieldsToPlot[n][f],cmap = cmap,aspect='equal') for n,[ax,cmap] in enumerate(zip(axes.flatten(),self.p['Colormaps']))]
+        plt.suptitle(f'{self.p["NL"]} NL \n'+f'($L_x={self.p ["Lx"]},L_y={self.p["Ly"]},N_x={self.p["Nx"]},N_y={self.p["Ny"]}, \\alpha={self.p["alpha"]}$)')    
         self.ims = []
-        for n,[cmap,field,ax,label] in enumerate(zip(self.cmaps,self.FieldsToPlot,axes.flatten(),['$\\phi$', 'defects','mag'])):    
+        for n,[cmap,field,ax,label] in enumerate(zip(self.p['Colormaps'],self.FieldsToPlot,axes.flatten(),['$\\phi$', 'defects','mag'])):    
             if n==0:
                 self.ims.append(ax.imshow(field[f],cmap=cmap,aspect='equal',vmin=-np.pi,vmax=np.pi))
             # if n==0:
@@ -152,7 +155,7 @@ class NLOE2D_analysis():
                     vmax = np.max(f)
                     im.set_clim(vmin, vmax)
         anim = animation.FuncAnimation(self.fig, animate, 
-                        frames=self.frames, interval=40, blit=False)
+                        frames=self.results['frames'], interval=40, blit=False)
         if not os.path.exists(folder):
             os.makedirs(folder)
         anim.save(folder+filename+'.mp4')    

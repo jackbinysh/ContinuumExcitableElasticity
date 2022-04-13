@@ -53,25 +53,25 @@ class NLOE2D_sim():
                 field=np.moveaxis(np.asarray(field),0,1)
                 u = field[:2]
                 v = field[2:]
-                results['u'] = u
-                results['v'] = v
                 self.p['times'] = len(u[0])
             elif self.p['basis']=='strain':
-                phi,phidot=np.moveaxis(np.asarray(field),0,1)
-                results['phi']  = phi
-                results['phidot'] = phidot
-                self.p['times'] = len(phi)
+                u,v=np.moveaxis(np.asarray(field),0,1)
+                self.p['times'] = len(u)
+            results['u']  = u
+            results['v'] = v
             results = {**self.p, **results}
-            print('saved as:   ', filename)
+            ana = NLOE2D_analysis(results)
+            self.p['defects'] = ana.results['defects']
+            self.p['charges'] = ana.results['charges']                    
             if self.p['data_output']=='all':
-                pickle.dump(results,output,pickle.HIGHEST_PROTOCOL)
+                data = results
             elif self.p['data_output']=='defects':
-                ana = NLOE2D_analysis(results)
-                self.p['defects'] = ana.results['defects']
-                self.p['charges'] = ana.results['charges']                
                 data = self.p
-                pickle.dump(data,output,pickle.HIGHEST_PROTOCOL)
-
+            pickle.dump(data,output,pickle.HIGHEST_PROTOCOL)
+            print('saved as:   ', filename)
+            
+            
+            
     class Displacement(PDEBase):
         def __init__(self,p,state):
             self.p=p
@@ -194,21 +194,21 @@ class NLOE2D_sim():
 
         def evolution_rate(self, state, t=0):
             alpha,NL = self.p['alpha'],self.p['NL']
-            ph, phdot = state
+            u, v = state
             rhs = state.copy()
             ##### Nonlinear odd elasticity, strain formulation 
-            rhs[0] = phdot
+            rhs[0] = v
             if NL == 'passive_cubic':
-                rhs[1] = (ph+1j*alpha*ph + phdot + np.abs(ph)**2*ph).laplace(bc=self.p['BCtype'])
+                rhs[1] = (u+1j*alpha*u + v + np.abs(u)**2*u).laplace(bc=self.p['BCtype'])
             if NL == 'active_bilinear':
                 thr=1
-                phmod_ = np.abs(ph.data)
-                ph_ = np.copy(phmod_)
-                ph_[ph_>thr]=thr
-                ph_unit = ph.data/phmod_
-                ph_NL = ph_*ph_unit    
-                ph_NL = ScalarField(self.grid,ph_NL,dtype=complex)
-                rhs[1] = (ph+phdot+alpha*1j*ph_NL).laplace(bc=self.p['BCtype'])
+                absu_ = np.abs(u.data)
+                u_ = np.copy(absu_)
+                u_[u_>thr]=thr
+                u_unit = u.data/absu_
+                u_NL = u_*u_unit    
+                u_NL = ScalarField(self.grid,u_NL,dtype=complex)
+                rhs[1] = (u+v+alpha*1j*u_NL).laplace(bc=self.p['BCtype'])
             return rhs
 
         def _make_pde_rhs_numba(self, state):
@@ -218,21 +218,21 @@ class NLOE2D_sim():
             laplace = state.grid.get_operator("laplace", bc =self.p['BCtype'])
             @nb.jit
             def pde_rhs(state_data, t):
-                ph = state_data[0]
-                phdot = state_data[1]
+                u = state_data[0]
+                v = state_data[1]
                 rate = np.empty_like(state_data)
-                rate[0] = phdot
+                rate[0] = v
                 if NL == 'passive_cubic':
-                    rate[1] = laplace(ph+1j*alpha*ph + phdot + np.abs(ph)**2*ph)
+                    rate[1] = laplace(u+1j*alpha*u + v + np.abs(u)**2*u)
                 if NL == 'active_bilinear':
                     thr=1
-                    phmod_ = np.abs(ph.flatten())
-                    ph_ = np.copy(phmod_)
-                    ph_[ph_>thr]=thr
-                    phi_unit = ph.flatten()/phmod_
-                    ph_NL = ph_*phi_unit
-                    ph_NL = np.reshape(ph_NL,(Nx,Ny))
-                    rate[1] = laplace(ph+phdot+alpha*1j*ph_NL)
+                    absu_ = np.abs(u.flatten())
+                    u_ = np.copy(absu_)
+                    u_[u_>thr]=thr
+                    ui_unit = u.flatten()/absu_
+                    u_NL = u_*ui_unit
+                    u_NL = np.reshape(u_NL,(Nx,Ny))
+                    rate[1] = laplace(u+v+alpha*1j*u_NL)
                 return rate
             return pde_rhs
         
