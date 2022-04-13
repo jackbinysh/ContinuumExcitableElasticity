@@ -13,14 +13,6 @@ class NLOE2D_sim():
         self.p=parameters
         pass
              
-    def get_plist(self,p0,pname,prange):#make a list of parameter dicts for parameter sweeps
-        dictlist=[]
-        for v in prange:
-            p = p0.copy()
-            for n,i in enumerate(pname):
-                p[i] = v
-            dictlist.append(p)
-        return dictlist
     
     def get_initial_state(self):
         Nx = self.p['Nx']
@@ -35,65 +27,49 @@ class NLOE2D_sim():
         self.init = amp*(np.random.rand(4,Nx,Ny)-0.5)
         for n,i in enumerate(self.init):
             self.init[n] = i - np.average(i)
-
         
-    
-    def DisplacementPDE(self,p):
-        self.p=p
-        self.get_initial_state()
-        self.init=FieldCollection([VectorField(self.grid,self.init[:2]),VectorField(self.grid,self.init[2:])])
-        self.runsim(basis='displacement',save=self.p['data_output'])
-    
-    def StrainPDE(self,p):
-        self.p=p
-        self.get_initial_state()
-        self.init=FieldCollection([ScalarField(self.grid,np.vectorize(complex)(*self.init[:2]),dtype=complex),ScalarField(self.grid,np.vectorize(complex)(*self.init[2:]),dtype=complex)])
-        self.runsim('strain',save=self.p['data_output'])
-        
-        
-    def runsim(self,basis='strain',save='defect'):
-        p=self.p
+    def runsim(self):
         storage = MemoryStorage()
         trackers = ['progress'    , 'consistency'  ,     storage.tracker(interval=self.p['pt']) ]
-        if basis=='displacement':
+        self.get_initial_state()
+        if self.p['basis']=='displacement':
             print('running displacement simulation')
-            A=self.Displacement(self.p,self.init)
-        elif basis=='strain':
+            self.init=FieldCollection([VectorField(self.grid,self.init[:2]),VectorField(self.grid,self.init[2:])])
+            eq=self.Displacement(self.p,self.init)
+        elif self.p['basis']=='strain':
             print('running strain simulation')
-            A=self.Strain(self.p,self.init)
-        sol = A.solve(self.init, t_range=self.p['tf'],tracker=trackers,adaptive=True)#dt=self.p['dt'])
-        filename = self.p['savefolder']+self.p['subfolder']+self.p['savefile']
+            self.init=FieldCollection([ScalarField(self.grid,np.vectorize(complex)(*self.init[:2]),dtype=complex),ScalarField(self.grid,np.vectorize(complex)(*self.init[2:]),dtype=complex)])            
+            eq=self.Strain(self.p,self.init)
+        sol = eq.solve(self.init, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])
+        filename = self.p['savefolder']+self.p['subfolder']+self.p['basis'] + ' - ' + self.p['savefile']
         if not os.path.exists(self.p['savefolder']+self.p['subfolder']):
             os.makedirs(self.p['savefolder']+self.p['subfolder'])
         field =[]    
         for j,i in storage.items():
             field.append(np.array(i.data))
         with open(filename, 'wb') as output:
-            
-            
-            p_ = p.copy()
-            if basis=='displacement':
+            results = {}
+            if self.p['basis']=='displacement':
                 field=np.moveaxis(np.asarray(field),0,1)
                 u = field[:2]
                 v = field[2:]
-                p_['u'] = u
-                p_['v'] = v
-                p['times'] = len(u[0])
-            elif basis=='strain':
+                results['u'] = u
+                results['v'] = v
+                self.p['times'] = len(u[0])
+            elif self.p['basis']=='strain':
                 phi,phidot=np.moveaxis(np.asarray(field),0,1)
-                p_['phi']  = phi
-                p_['phidot'] = phidot
-                p['times'] = len(phi)
+                results['phi']  = phi
+                results['phidot'] = phidot
+                self.p['times'] = len(phi)
+            results = {**self.p, **results}
             print('saved as:   ', filename)
-            if save=='all':
-                pickle.dump(p_,output,pickle.HIGHEST_PROTOCOL)
-            elif save=='defects':
-                self.A  = NLOE2D_analysis(p_)
-                self.A.compute_qties()
-                p_=p.copy()
-                p['defects'] = self.A.defects
-                p['charges'] = self.A.charges                
-                data = p
+            if self.p['data_output']=='all':
+                pickle.dump(results,output,pickle.HIGHEST_PROTOCOL)
+            elif self.p['data_output']=='defects':
+                ana = NLOE2D_analysis(results)
+                self.p['defects'] = ana.results['defects']
+                self.p['charges'] = ana.results['charges']                
+                data = self.p
                 pickle.dump(data,output,pickle.HIGHEST_PROTOCOL)
 
     class Displacement(PDEBase):

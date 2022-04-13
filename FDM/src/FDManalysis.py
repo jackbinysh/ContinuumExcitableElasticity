@@ -4,15 +4,42 @@ import os,sys
 import pickle as pickle
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-
+import matplotlib.cm as cm
 
 class NLOE2D_analysis():
     def __init__(self,path):
+        self.results={}
         if type(path) is dict:
             self.p = path
+            self.compute_qties()
         else:
-            with open(path, 'rb') as output:
-                self.p = pickle.load(output)
+            self.load(path)
+            
+    def load(self,path):
+        with open(path, 'rb') as output:
+            self.p = pickle.load(output)
+
+    def analyze_defects(self):
+        folder = self.p['savefolder'] + self.p['subfolder']
+        directory = os.fsencode(folder)
+        lst =[ os.fsdecode(i) for i in os.listdir(directory)]
+        if '.DS_Store' in lst: lst.remove('.DS_Store')
+        NdMean=[]
+        for nf,f in enumerate(lst):    
+            with open(self.p['savefolder'] + self.p['subfolder']+f, 'rb') as output:
+                p=pickle.load(output)
+                if p['times']!=101:
+                    pass
+                else:
+                    t,x,y=self.results['defects']
+                    Ndt= np.zeros(self.p['times'])
+                    Nd = np.bincount(t)
+                    Nd =Nd[Nd!=0]
+                    times = np.unique(t)
+                    Ndt[times] = Nd 
+                    NdMean.append(Ndt)
+        self.NdMean=np.mean(np.asarray(NdMean),axis=0)
+
 
     def track_defects(self,th):
         nbMat = np.zeros((np.shape(th)[0],8,self.p['Nx'],self.p['Ny'])) 
@@ -26,9 +53,10 @@ class NLOE2D_analysis():
         defectMat += - 8*np.pi
         defectMat[np.abs(defectMat)<5*np.pi]=0        
         self.defectMat = defectMat/(2*np.pi)
-        self.defects = np.nonzero(defectMat)
-        self.charges= defectMat[defectMat != 0]
-
+        defects = np.nonzero(defectMat)
+        charges= defectMat[defectMat != 0]
+        self.results['defects'] = defects
+        self.results['charges'] = charges
 
     def compute_qties(self):
         if 'u' in self.p.keys():
@@ -41,6 +69,7 @@ class NLOE2D_analysis():
             self.u_mag = np.abs(ux+1j*uy)
             self.v_mag = np.abs(vx+1j*vy)
             self.track_defects(th=self.u_angle)
+            self.analyze_defects()
             self.FieldsToPlot = [self.u_angle,self.defectMat,self.u_mag]
         elif 'phi' in self.p.keys():
             print('strain')
@@ -59,6 +88,7 @@ class NLOE2D_analysis():
             self.error = self.momentum/self.energy
             self.dispbasis = np.angle(np.sqrt((self.S1+1j*self.S2)/self.modphi))%np.pi
             self.track_defects(th=self.dispbasis)
+            self.analyze_defects()
             self.FieldsToPlot = [self.argphi,self.defectMat,self.modphi]
         self.times = np.arange(self.frames)*self.p['pt']
         
@@ -126,3 +156,47 @@ class NLOE2D_analysis():
         if not os.path.exists(folder):
             os.makedirs(folder)
         anim.save(folder+filename+'.mp4')    
+        
+    
+
+    def plot_defect_statistics(self):
+        folder = self.p['savefolder']
+        directory = os.fsencode(folder)
+        print(directory)
+        lst =[ os.fsdecode(i) for i in os.listdir(directory)]
+        
+        if '.DS_Store' in lst: lst.remove('.DS_Store')
+        print(lst)
+        lst = sorted(lst, key=lambda x: float(x.split('=')[1]))
+        
+        Nd_alpha=[]
+        fig,ax0= plt.subplots(1,figsize=(6,6),dpi=100)
+        axes =np.asarray([ax0])
+        colors = cm.rainbow(np.linspace(0, 1, len(lst)))
+        for n,l in enumerate(lst):
+            N_NESS=0
+            self.p['subfolder'] = l + '/'
+            self.load(self.p['savefolder']+self.p['subfolder']+self.p['savefile'])
+
+            NdMean = self.analyze_defects()
+            times = np.arange(len(NdMean))
+            alpha =float(l.split('=')[1])
+            times=times*self.p['pt'] * alpha
+            NdMean = (NdMean-N_NESS)/alpha
+            
+            ax0.scatter(times,NdMean,s=1,label='$\\'+l+'$',color=colors[n])
+            plt.suptitle(f'20 runs,$L=1$')
+            ax0.set_ylabel('$\\frac{ N(t)}{\\alpha}$')
+            for i in axes.flatten():
+                i.set_xscale('log')
+                i.set_yscale('log')
+                # i.set_xlim([5e0,1e3])
+                i.set_xlabel('$\\alpha t$')
+        tline = np.logspace(1.5,2.5,100)
+        ax0.plot(tline,5e3*tline**(-5/2),label='$\propto t^{-5/2}$',lw=2,c='k')
+        ax0.legend(markerscale=5)
+        plt.tight_layout()
+        plt.savefig(self.p['savefolder'] + 'test.pdf')
+        plt.show()
+
+            
