@@ -2,7 +2,7 @@
 import numpy as np
 from pde import CartesianGrid, MemoryStorage, ScalarField, FieldCollection, PDEBase, VectorField
 from pde.tools.numba import jit
-import os
+import os,time
 import numba as nb
 import pickle as pickle
 import matplotlib.pyplot as plt
@@ -40,10 +40,11 @@ class NLOE2D_sim():
             print('running strain simulation')
             self.init=FieldCollection([ScalarField(self.grid,np.vectorize(complex)(*self.init[:2]),dtype=complex),ScalarField(self.grid,np.vectorize(complex)(*self.init[2:]),dtype=complex)])            
             eq=self.Strain(self.p,self.init)
-        sol = eq.solve(self.init, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])
-        filename = self.p['savefolder']+self.p['subfolder']+self.p['basis'] + ' - ' + self.p['savefile']
-        if not os.path.exists(self.p['savefolder']+self.p['subfolder']):
-            os.makedirs(self.p['savefolder']+self.p['subfolder'])
+
+        sol = eq.solve(self.init, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])        
+        filename = self.p['datafolder'] + self.p['subfolder']+self.p['subsubfolder']+self.p['basis'] + ' - ' + self.p['savefile']
+        if not os.path.exists(self.p['datafolder'] + self.p['subfolder']+self.p['subsubfolder']):
+            os.makedirs(self.p['datafolder'] + self.p['subfolder']+self.p['subsubfolder'])
         field =[]    
         for j,i in storage.items():
             field.append(np.array(i.data))
@@ -53,27 +54,27 @@ class NLOE2D_sim():
                 field=np.moveaxis(np.asarray(field),0,1)
                 u = field[:2]
                 v = field[2:]
-                self.p['times'] = len(u[0])
+                self.p['timesteps'] = len(u[0])
             elif self.p['basis']=='strain':
                 u,v=np.moveaxis(np.asarray(field),0,1)
-                self.p['times'] = len(u)
+                self.p['timesteps'] = len(u)
             results['u']  = u
             results['v'] = v
             results = {**self.p, **results}
             ana = NLOE2D_analysis(results)
             self.p['defects'] = ana.results['defects']
             self.p['charges'] = ana.results['charges']                    
-            if self.p['data_output']=='all':
-                data = results
-            elif self.p['data_output']=='defects':
-                data = self.p
-            pickle.dump(data,output,pickle.HIGHEST_PROTOCOL)
+            results = {**self.p, **results}
+            if self.p['output_data']=='all':
+                self.p = results
+            pickle.dump(self.p,output,pickle.HIGHEST_PROTOCOL)
             print('saved as:   ', filename)
             
             
             
     class Displacement(PDEBase):
         def __init__(self,p,state):
+            self.st = time.time()
             self.p=p
             self.init=state
         
@@ -86,27 +87,38 @@ class NLOE2D_sim():
             # vector laplacian of the velocity
             apply_laplace = p.grid.make_operator('vector_laplace', self.p['BCtype'])
             lapp=apply_laplace(p.data)
+            
+            
+            apply_div =  u.grid.make_operator('divergence', self.p['BCtype'])
+            apply_grad =  u.grid.make_operator('gradient', self.p['BCtype'])
+            graddivu = apply_grad(apply_div(u.data))
+
+            
             ### linear parts ###
             # shear force
             ShearForce=lapu
+            #bulk force
+            BulkForce=self.p['B'] * graddivu 
             # Odd force
             OddForce=self.p['alpha']*np.array([lapu[1],-lapu[0]])       
             #viscous force
             ViscousForce=lapp
+
             ### nonlinear parts### 
             # Adding the divergence of the nonlinear shear stress, d_j ( (S_kl S_kl)S_ij )
             diuj= u.gradient(self.p['BCtype'])       
             Sij=diuj.symmetrize(make_traceless=True) # the traceless part of the strain tensor
             NonLinearShearForce= ((Sij.dot(Sij).trace())*Sij).divergence(self.p['BCtype']).data
             udot=p
-            pdot=(ShearForce+OddForce+ViscousForce+NonLinearShearForce)
+            pdot=(ShearForce+BulkForce+OddForce+ViscousForce+NonLinearShearForce)
+
             return FieldCollection([VectorField(u.grid,udot),VectorField(p.grid,pdot)])
             
             
         def _make_pde_rhs_numba(self, state):
             #numba-compiled implementation of the PDE
             mu=1
-            B=0
+            B=self.p['B']
             ko=self.p['alpha']
             eta=1
             mu_tilde=1

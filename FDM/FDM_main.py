@@ -7,73 +7,97 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
       
     
-parameters = {'tf':1., #total time
-              'pt':0.01,#print interval
-              'dt':0.1e-4,#integration step
-              'alpha':600,#model parameter
-              'Lx':1,#boxsize
-              'Ly':1,#boxsize
-              'Nx':20,#spatial discretization
-              'Ny':20,#spatial discretization
-              'nx':4,#initial condition mode (sine wave)
-              'ny':4,#initial condition mode (sine wave)
-              'amp':1e-3,#initial field amplitude
+parameters = {#time
+              'tf':5, #total time
+              'pt':1e-1, #print interval
+              'dt':0.8e-4,#integration step
+              
+              #system parameters
+              'alpha':10,#activity
+              'B': 0, #model parameter for displacement formulation: bulk modulus
+              'Lx':14,#boxsize
+              'Ly':10,#boxsize
+              'basis': 'strain', #'dislacement' or 'strain'
+              
+              #Domain
+              'Nx':140,#spatial discretization
+              'Ny':100,#spatial discretization
               'BC':[False,False], #Boundary conditions in x and y directions, True = periodical 
               'BCtype': 'auto_periodic_neumann',
               'NL':'passive_cubic',#NL type: choose 'active_bilinear' or 'passive_cubic'
+              
+              #IC
               'IC':'ran',#initial conditions: 'ran' for random, 'sin', for sinusoidal
-              'savefolder':'datasets/run1/',#folder for 
-              'subfolder': 'alpha=600/',#subfolder parameter value
-              'savefile':'test', #filename of pickle data file
-              'data_output':'all',#'all' for full timeseries, 'defects' for defect data only
-              'basis': 'strain', #'dislacement' or 'strain'
-              'Fields to Plot': ['argu','defectfield','absu'],
-              'Colormaps': ['hsv','RdBu','viridis']
+              'nx':4,#initial condition mode (sine wave)
+              'ny':4,#initial condition mode (sine wave)
+              'amp':1e-3,#initial field amplitude
+              
+              #saving/loading/plotting
+              'datafolder': 'datasets/',
+              'subfolder': 'experiment1/',
+              'subsubfolder': 'alpha = 300/',
+              
+            #   'savefolder':'datasets/run1/',#folder for 
+            #   'subfolder': 'alpha = 600/',#subfolder parameter value
+              'savefile':'run 0', #filename of pickle data file
+              'outputfolder': 'output/',#folder for plots/animations
+              'output_data':'defects',#'all' for full timeseries, 'defects' for defect data only
+              'Fields to Plot': ['argu','defectfield','absu'], #fields to animate
+              'Colormaps': ['hsv','RdBu','viridis']            #colormaps for those fields
               }
 
-
-def SingleRun(parameters):
-    sim = NLOE2D_sim(parameters)
-    sim.runsim()
-
-def RepeatRun(paramlist,cores=1):    
-    def main():
-        pool = multiprocessing.Pool(cores)
-        pool.map(SingleRun, paramlist)
-        pool.close()
-    if __name__ ==  '__main__':
-        main()
-        
-def GetParamList(pname,prange,n):#make a list of parameter dicts for parameter sweep    
-    paramlist = []
-    for val in prange:
-        for run in range(n):
-            p = parameters.copy()
-            p['subfolder'] = f'{pname} = {val}'
-            p[pname] = val
-            p['savefile'] = f'run {run}'
-            paramlist.append(p)
-    return paramlist
-
-
-def animate(parameters):
-    filename = parameters['savefolder']+parameters['subfolder']+parameters['basis'] + ' - ' + parameters['savefile']
-    A  = NLOE2D_analysis(filename)
-    A.animate_fields('output/',parameters['savefile'])
+class Jobs():
+    def __init__(self):
+        pass
+    def SingleRun(self,parameters):
+        sim = NLOE2D_sim(parameters)
+        sim.runsim()
+    def RepeatRun(self,pname,prange,n=1,cores=1):
+        paramlist = self.GetParamList(pname,prange,n) #get list of dicts with parameters
+        def main():
+            pool = multiprocessing.Pool(cores)
+            pool.map(self.SingleRun, paramlist)
+            pool.close()
+        if __name__ ==  '__main__':
+            main()   
+    def GetParamList(self,pname,prange,n):#make a list of parameter dicts for parameter sweep    
+        paramlist = []
+        for val in prange:
+            for run in range(n):
+                p = parameters.copy()
+                p['subfolder'] = f'{pname} = {val}/'
+                p[pname] = val
+                p['savefile'] = f'run {run}'
+                paramlist.append(p)
+        return paramlist
 
 # Run a single simulation based on parameters:
-SingleRun(parameters) 
+# J = Jobs()
+# J.SingleRun(parameters)
 
-
-# Run multiple simulations over a range of parameters
+# Run multiple simulations over a range of parameters:
 # pname = 'alpha' #parameter to sweep over
 # prange = [600]  #range to sweep over
-# n=4             #number of runs
-# paramlist = GetParamList(pname,prange,n) #get list of dicts with parameters
-# RepeatRun(paramlist,cores=2)
+# n=1             #number of runs
+# J.RepeatRun(pname,prange,n=n,cores=1)
 
 
-animate(parameters)
+
+
+#### analysis/plotting
+loadfolder = parameters['datafolder'] + parameters['subfolder']+ parameters['subsubfolder']+parameters['basis'] + ' - ' + parameters['savefile']
+savefolder = parameters['outputfolder']+ parameters['subfolder']
+savefile = parameters['savefile']
+
+
+ana  = NLOE2D_analysis(loadfolder)
+ana.AnimateFields(savefolder,savefile)
+ana.PlotTimeseries(savefolder,savefile)
+
+
+loadfolder = parameters['datafolder'] + parameters['subfolder']
+ana  = NLOE2D_analysis(loadfolder)
+ana.PlotDefectStatistics(loadfolder,savefolder,savefile)
 
 
 
