@@ -8,16 +8,15 @@ import matplotlib.cm as cm
 
 class NLOE2D_analysis():
     def __init__(self,path):
-        self.results={}
+        self.timeseries={}
+        self.fielddata={}
         if type(path) is dict:
             self.p = path
             self.compute_qties()
         else:
             try:
-                print(path)
                 self.load(path)
             except IsADirectoryError:
-                print('DIR ERROR')
                 self.p={}
 
     def load(self,path):
@@ -36,14 +35,13 @@ class NLOE2D_analysis():
                 # if self.p['output_data'] == 'all':
                 #     self.compute_qties
                 t,x,y=self.p['defects']
-                Ndt= np.zeros(self.p['timesteps'])
+                Ndt= np.zeros(self.p['frames'])
                 Nd = np.bincount(t)
                 Nd =Nd[Nd!=0]
                 times = np.unique(t)
                 Ndt[times] = Nd 
-                
+
                 NdMean.append(Ndt)
-                    
         self.NdMean=np.mean(np.asarray(NdMean),axis=0)
 
         return self.NdMean
@@ -60,9 +58,9 @@ class NLOE2D_analysis():
         defectMat[np.abs(defectMat)<6*np.pi]=0        
         defects = np.nonzero(defectMat)
         charges= defectMat[defectMat != 0]
-        self.results['defectfield'] = defectMat/(2*np.pi)
-        self.results['defects'] = defects
-        self.results['charges'] = charges
+        self.fielddata['defectfield'] = defectMat/(2*np.pi)
+        self.timeseries['defects'] = defects
+        self.timeseries['charges'] = charges
 
     def compute_qties(self):
         if self.p['basis'] == 'displacement':
@@ -76,28 +74,30 @@ class NLOE2D_analysis():
             u = self.p['u']
             v = self.p['v']
             
-        self.results['frames'] = len(u)
-        self.results['argu'] = np.angle(u)
-        self.results['argv'] = np.angle(v)
-        self.results['absu'] = np.abs(u)
-        self.results['absv'] = np.abs(v)
-        self.results['Re(u)'] = np.real(u)
-        self.results['Im(u)'] = np.imag(u)
-        self.results['Re(u)'] = np.real(v)
-        self.results['Re(u)'] = np.imag(v)
-        self.results['|u|^2'] = self.results['absu']**2
-        self.results['momentum'] = np.abs(np.sum(u,axis=(1,2)))**2
-        self.results['energy'] = np.sum(self.results['|u|^2'],axis=(1,2))
-        self.results['error'] = self.results['momentum']/self.results['energy']
-        self.results['defectfield'] = self.results['argu']
-        self.results['times'] = np.arange(self.results['frames'])*self.p['pt']
+        
+        self.fielddata['argu'] = np.angle(u)
+        self.fielddata['argv'] = np.angle(v)
+        self.fielddata['absu'] = np.abs(u)
+        self.fielddata['absv'] = np.abs(v)
+        self.fielddata['Re(u)'] = np.real(u)
+        self.fielddata['Im(u)'] = np.imag(u)
+        self.fielddata['Re(u)'] = np.real(v)
+        self.fielddata['Re(u)'] = np.imag(v)
+        self.fielddata['|u|^2'] = self.fielddata['absu']**2
+        
+        self.timeseries['frames'] = len(u)
+        self.timeseries['momentum'] = np.abs(np.sum(u,axis=(1,2)))**2
+        self.timeseries['energy'] = np.sum(self.fielddata['|u|^2'],axis=(1,2))
+        self.timeseries['error'] = self.timeseries['momentum']/self.timeseries['energy']
+        self.timeseries['times'] = np.arange(self.timeseries['frames'])*self.p['pt']
+        
         if self.p['basis'] == 'strain':
-            self.results['defectfield'] = np.angle(np.sqrt((self.results['Re(u)']+1j*self.results['Im(u)'])/self.results['absu']))%np.pi
-        elif self.p['basis'] == 'strain':
-            self.results['defectfield'] = self.results['argu']
+            self.fielddata['defectfield'] = np.angle(np.sqrt((self.fielddata['Re(u)']+1j*self.fielddata['Im(u)'])/self.fielddata['absu']))%np.pi
+        elif self.p['basis'] == 'displacement':
+            self.fielddata['defectfield'] = self.fielddata['argu']
             
-        self.track_defects(th=self.results['defectfield'])                
-        self.FieldsToPlot = [self.results[f] for f in self.p['Fields to Plot']]   #   [self.u_angle,self.defectMat,self.u_mag]
+        self.track_defects(th=self.fielddata['defectfield'])                
+        self.FieldsToPlot = [self.fielddata[f] for f in self.p['Fields to Plot']]   #   [self.u_angle,self.defectMat,self.u_mag]
         
     def get_frame(self,f=-1,save=False):
         self.compute_qties()
@@ -132,7 +132,7 @@ class NLOE2D_analysis():
                         vmax = np.max(f)
                         im.set_clim(vmin, vmax)
             anim = animation.FuncAnimation(self.fig, animate, 
-                            frames=self.results['frames'], interval=40, blit=False)
+                            frames=self.timeseries['frames'], interval=40, blit=False)
             if not os.path.exists(savefolder):
                 os.makedirs(savefolder)
             anim.save(savefolder+savefile+' - animation.mp4')    
@@ -141,10 +141,9 @@ class NLOE2D_analysis():
         # self.compute_qties()
         fig,ax = plt.subplots(1,3,figsize=(18,6))
         t = self.p['times']
-
-        ax[0].scatter(t,self.results['momentum'])
-        ax[1].scatter(t,self.results['energy'])
-        ax[2].scatter(t,self.results['error'])
+        ax[0].scatter(t,self.p['momentum'])
+        ax[1].scatter(t,self.p['energy'])
+        ax[2].scatter(t,self.p['error'])
         for i in ax:
             i.set_yscale('log')
         if not os.path.exists(savefolder):
@@ -166,13 +165,10 @@ class NLOE2D_analysis():
             subfolder = loadfolder + l +'/'
             
             NdMean = self.get_defect_statistics(subfolder)
-            print(NdMean)
+
             alpha =float(l.split('=')[1])
-            timestamps=np.arange(self.p['timesteps'])*self.p['pt'] * alpha
-            NdMean = (NdMean-N_NESS)/alpha
-            print(np.shape(timestamps))
-            print(np.shape(NdMean))
-        
+            timestamps=np.arange(self.p['frames'])*self.p['pt'] * alpha
+            NdMean = (NdMean-N_NESS)/alpha       
             ax0.scatter(timestamps,NdMean,s=1,label='$\\'+l+'$',color=colors[n])
             plt.suptitle(f'{len(lst)} runs,$Lx={self.p["Lx"]}$, $Ly={self.p["Ly"]}$')
             ax0.set_ylabel('$\\frac{ N(t)}{\\alpha}$')

@@ -49,25 +49,22 @@ class NLOE2D_sim():
         for j,i in storage.items():
             field.append(np.array(i.data))
         with open(filename, 'wb') as output:
-            results = {}
+            data = {}
             if self.p['basis']=='displacement':
                 field=np.moveaxis(np.asarray(field),0,1)
                 u = field[:2]
                 v = field[2:]
-                self.p['timesteps'] = len(u[0])
             elif self.p['basis']=='strain':
                 u,v=np.moveaxis(np.asarray(field),0,1)
-                self.p['timesteps'] = len(u)
-            results['u']  = u
-            results['v'] = v
-            results = {**self.p, **results}
-            ana = NLOE2D_analysis(results)
-            self.p['defects'] = ana.results['defects']
-            self.p['charges'] = ana.results['charges']                    
-            results = {**self.p, **results}
-            if self.p['output_data']=='all':
-                self.p = results
-            pickle.dump(self.p,output,pickle.HIGHEST_PROTOCOL)
+            data['u'] = u
+            data['v'] = v
+            data = {**self.p, **data}
+            ana = NLOE2D_analysis(data)
+            data = {**data, **ana.timeseries}
+            if self.p['output_data']=='defects':
+                data.pop('u', None)
+                data.pop('v', None)
+            pickle.dump(data,output,pickle.HIGHEST_PROTOCOL)
             print('saved as:   ', filename)
             
             

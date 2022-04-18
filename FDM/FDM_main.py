@@ -8,23 +8,24 @@ import matplotlib.cm as cm
       
     
 parameters = {#time
-              'tf':5, #total time
+              'tf':50, #total time
               'pt':1e-1, #print interval
-              'dt':0.8e-4,#integration step
+              'dt':0.5e-4,#integration step
               
               #system parameters
               'alpha':10,#activity
               'B': 0, #model parameter for displacement formulation: bulk modulus
               'Lx':14,#boxsize
               'Ly':10,#boxsize
-              'basis': 'strain', #'dislacement' or 'strain'
+              'basis': 'displacement', #'dislacement' or 'strain'
+              'NL':'passive_cubic',#NL type: choose 'passive_cubic' or 'active_bilinear'(strain only)
               
               #Domain
               'Nx':140,#spatial discretization
               'Ny':100,#spatial discretization
               'BC':[False,False], #Boundary conditions in x and y directions, True = periodical 
               'BCtype': 'auto_periodic_neumann',
-              'NL':'passive_cubic',#NL type: choose 'active_bilinear' or 'passive_cubic'
+              
               
               #IC
               'IC':'ran',#initial conditions: 'ran' for random, 'sin', for sinusoidal
@@ -41,7 +42,7 @@ parameters = {#time
             #   'subfolder': 'alpha = 600/',#subfolder parameter value
               'savefile':'run 0', #filename of pickle data file
               'outputfolder': 'output/',#folder for plots/animations
-              'output_data':'defects',#'all' for full timeseries, 'defects' for defect data only
+              'output_data':'all',#'all' for full timeseries, 'defects' for defect data only
               'Fields to Plot': ['argu','defectfield','absu'], #fields to animate
               'Colormaps': ['hsv','RdBu','viridis']            #colormaps for those fields
               }
@@ -72,8 +73,8 @@ class Jobs():
         return paramlist
 
 # Run a single simulation based on parameters:
-# J = Jobs()
-# J.SingleRun(parameters)
+J = Jobs()
+J.SingleRun(parameters)
 
 # Run multiple simulations over a range of parameters:
 # pname = 'alpha' #parameter to sweep over
