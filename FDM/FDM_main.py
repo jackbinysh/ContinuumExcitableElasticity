@@ -10,14 +10,14 @@ import matplotlib.cm as cm
 parameters = {#time
               'tf':50, #total time
               'pt':1e-1, #print interval
-              'dt':0.5e-4,#integration step
+              'dt':0.1e-3,#integration step
               
               #system parameters
               'alpha':10,#activity
               'B': 0, #model parameter for displacement formulation: bulk modulus
               'Lx':14,#boxsize
               'Ly':10,#boxsize
-              'basis': 'displacement', #'dislacement' or 'strain'
+              'basis': 'strain', #'dislacement' or 'strain'
               'NL':'passive_cubic',#NL type: choose 'passive_cubic' or 'active_bilinear'(strain only)
               
               #Domain
@@ -25,7 +25,6 @@ parameters = {#time
               'Ny':100,#spatial discretization
               'BC':[False,False], #Boundary conditions in x and y directions, True = periodical 
               'BCtype': 'auto_periodic_neumann',
-              
               
               #IC
               'IC':'ran',#initial conditions: 'ran' for random, 'sin', for sinusoidal
@@ -73,8 +72,8 @@ class Jobs():
         return paramlist
 
 # Run a single simulation based on parameters:
-J = Jobs()
-J.SingleRun(parameters)
+# J = Jobs()
+# J.SingleRun(parameters)
 
 # Run multiple simulations over a range of parameters:
 # pname = 'alpha' #parameter to sweep over
@@ -91,9 +90,9 @@ savefolder = parameters['outputfolder']+ parameters['subfolder']
 savefile = parameters['savefile']
 
 
-ana  = NLOE2D_analysis(loadfolder)
-ana.AnimateFields(savefolder,savefile)
-ana.PlotTimeseries(savefolder,savefile)
+# ana  = NLOE2D_analysis(loadfolder)
+# ana.AnimateFields(savefolder,savefile)
+# ana.PlotTimeseries(savefolder,savefile)
 
 
 loadfolder = parameters['datafolder'] + parameters['subfolder']
