@@ -1,3 +1,4 @@
+
 from src.FDMsim import NLOE2D_sim
 from src.FDManalysis import NLOE2D_analysis
 import numpy as np
@@ -9,11 +10,11 @@ import matplotlib.cm as cm
     
 parameters = {#time
               'tf':50, #total time
-              'pt':1e-1, #print interval
-              'dt':0.1e-3,#integration step
+              'pt':0.1, #print interval
+              'dt':1e-5,#integration step
               
               #system parameters
-              'alpha':10,#activity
+              'alpha':600,#activity
               'B': 0, #model parameter for displacement formulation: bulk modulus
               'Lx':14,#boxsize
               'Ly':10,#boxsize
@@ -21,8 +22,8 @@ parameters = {#time
               'NL':'passive_cubic',#NL type: choose 'passive_cubic' or 'active_bilinear'(strain only)
               
               #Domain
-              'Nx':140,#spatial discretization
-              'Ny':100,#spatial discretization
+              'Nx':560,#spatial discretization
+              'Ny':400,#spatial discretization
               'BC':[False,False], #Boundary conditions in x and y directions, True = periodical 
               'BCtype': 'auto_periodic_neumann',
               
@@ -34,16 +35,19 @@ parameters = {#time
               
               #saving/loading/plotting
               'datafolder': 'datasets/',
-              'subfolder': 'experiment1/',
+              'subfolder': 'experiment2/',
               'subsubfolder': 'alpha = 300/',
               
             #   'savefolder':'datasets/run1/',#folder for 
             #   'subfolder': 'alpha = 600/',#subfolder parameter value
-              'savefile':'run 0', #filename of pickle data file
+              'savefile':'run 1', #filename of pickle data file
               'outputfolder': 'output/',#folder for plots/animations
               'output_data':'all',#'all' for full timeseries, 'defects' for defect data only
-              'Fields to Plot': ['argu','defectfield','absu'], #fields to animate
-              'Colormaps': ['hsv','RdBu','viridis']            #colormaps for those fields
+}
+plotparams=  {'Fields to Plot': ['argu','defectfield','absu','abslapu','abslapv','abs(phi|phi|^2)','inertia'],
+              'Colormaps': ['hsv','RdBu','viridis','viridis','viridis','viridis','viridis'],            #colormaps for those fields
+              'Timeseries to Plot':['energy','N_t','Q_t','sumabslapu','sumabslapv','sumabs(phi|phi|^2)','suminertia'], #fields to animat
+              'Timeseries scale':[['linear','log'],['log','log'],['log','log'],['linear','log'],['linear','log'],['linear','log'],['linear','log']]
               }
 
 class Jobs():
@@ -72,8 +76,8 @@ class Jobs():
         return paramlist
 
 # Run a single simulation based on parameters:
-# J = Jobs()
-# J.SingleRun(parameters)
+J = Jobs()
+J.SingleRun(parameters)
 
 # Run multiple simulations over a range of parameters:
 # pname = 'alpha' #parameter to sweep over
@@ -90,14 +94,36 @@ savefolder = parameters['outputfolder']+ parameters['subfolder']
 savefile = parameters['savefile']
 
 
-# ana  = NLOE2D_analysis(loadfolder)
+# ana  = NLOE2D_analysis(loadfolder,plotparams=plotparams)
 # ana.AnimateFields(savefolder,savefile)
+
+
+
+
+# fig,ax= plt.subplots(1,2)
+# ax[0].scatter(t[:-100],Q[:-100])
+# ax[1].scatter(t[:-100],N[:-100])
+# plt.show()
+
+
 # ana.PlotTimeseries(savefolder,savefile)
+# ana.PlotCorrelation(savefolder,savefile)
 
 
-loadfolder = parameters['datafolder'] + parameters['subfolder']
-ana  = NLOE2D_analysis(loadfolder)
-ana.PlotDefectStatistics(loadfolder,savefolder,savefile)
+# loadfolder = parameters['datafolder'] + parameters['subfolder']
+# ana  = NLOE2D_analysis(loadfolder)
+# ana.PlotDefectStatistics(loadfolder,savefolder,savefile)
 
+
+
+### defect testing
+# ana.compute_qties()
+# N=ana.timeseries['N_t']
+# Q=ana.timeseries['Q_t']
+# t=ana.timeseries['times']
+# defects= ana.timeseries['defects'] 
+# q = ana.timeseries['charges'] 
+# print(np.shape(q))
+# print(np.shape(defects))
 
 
