@@ -9,12 +9,12 @@ import matplotlib.cm as cm
       
     
 parameters = {#time
-              'tf':50, #total time
-              'pt':0.1, #print interval
+              'tf':20, #total time
+              'pt':0.05, #print interval
               'dt':1e-5,#integration step
               
               #system parameters
-              'alpha':600,#activity
+              'alpha':60,#activity
               'B': 0, #model parameter for displacement formulation: bulk modulus
               'Lx':14,#boxsize
               'Ly':10,#boxsize
@@ -22,8 +22,8 @@ parameters = {#time
               'NL':'passive_cubic',#NL type: choose 'passive_cubic' or 'active_bilinear'(strain only)
               
               #Domain
-              'Nx':560,#spatial discretization
-              'Ny':400,#spatial discretization
+              'Nx':280,#spatial discretization
+              'Ny':200,#spatial discretization
               'BC':[False,False], #Boundary conditions in x and y directions, True = periodical 
               'BCtype': 'auto_periodic_neumann',
               
@@ -35,7 +35,7 @@ parameters = {#time
               
               #saving/loading/plotting
               'datafolder': 'datasets/',
-              'subfolder': 'experiment2/',
+              'subfolder': 'experiment1/',
               'subsubfolder': 'alpha = 300/',
               
             #   'savefolder':'datasets/run1/',#folder for 
@@ -44,11 +44,15 @@ parameters = {#time
               'outputfolder': 'output/',#folder for plots/animations
               'output_data':'all',#'all' for full timeseries, 'defects' for defect data only
 }
-plotparams=  {'Fields to Plot': ['argu','defectfield','absu','abslapu','abslapv','abs(phi|phi|^2)','inertia'],
+plotparams=  {'Fields to Plot': ['argu','defectfield','absu','abslapu','abslapv','abslap(phi|phi|^2)','inertia'],
               'Colormaps': ['hsv','RdBu','viridis','viridis','viridis','viridis','viridis'],            #colormaps for those fields
-              'Timeseries to Plot':['energy','N_t','Q_t','sumabslapu','sumabslapv','sumabs(phi|phi|^2)','suminertia'], #fields to animat
-              'Timeseries scale':[['linear','log'],['log','log'],['log','log'],['linear','log'],['linear','log'],['linear','log'],['linear','log']]
+              'Timeseries to Plot':['energy','N_t','Q_t','sumabslapu','sumabslapv','sumabslap(phi|phi|^2)','suminertia'], #fields to animat
+              'Timeseries scale':[['linear','log'],['log','log'],['log','linear'],['linear','log'],['linear','log'],['linear','log'],['linear','log']]
               }
+
+
+
+
 
 class Jobs():
     def __init__(self):
@@ -76,8 +80,8 @@ class Jobs():
         return paramlist
 
 # Run a single simulation based on parameters:
-J = Jobs()
-J.SingleRun(parameters)
+# J = Jobs()
+# J.SingleRun(parameters)
 
 # Run multiple simulations over a range of parameters:
 # pname = 'alpha' #parameter to sweep over
@@ -94,8 +98,8 @@ savefolder = parameters['outputfolder']+ parameters['subfolder']
 savefile = parameters['savefile']
 
 
-# ana  = NLOE2D_analysis(loadfolder,plotparams=plotparams)
-# ana.AnimateFields(savefolder,savefile)
+ana  = NLOE2D_analysis(loadfolder,plotparams=plotparams)
+ana.AnimateFields(savefolder,savefile)
 
 
 

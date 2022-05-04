@@ -11,19 +11,16 @@ class NLOE2D_analysis():
     def __init__(self,path,plotparams={}):
         self.timeseries={}
         self.fielddata={}
-        if type(path) is dict:
+        if type(path) is dict: # calculate timeseries to save with raw data
             self.p = path
-
-        else:
+            self.compute_qties()
+        else:                  # calculate field data for immediate plotting
             try:
-                self.load(path)
-                
+                self.load(path) #single file
             except IsADirectoryError:
-                self.p={}
-        self.p = {**self.p, **plotparams}
-        self.compute_qties()        
-        
-        
+                self.p={}       #folder?
+            self.p = {**self.p, **plotparams}
+            
     def load(self,path):
         with open(path, 'rb') as output:
             self.p = pickle.load(output)
@@ -37,8 +34,6 @@ class NLOE2D_analysis():
         for nf,f in enumerate(lst):    
             with open(folder+f, 'rb') as output:
                 self.p=pickle.load(output)
-                # if self.p['output_data'] == 'all':
-                #     self.compute_qties
                 t,x,y=self.p['defects']
                 Ndt= np.zeros(self.p['frames'])
                 Nd = np.bincount(t)
@@ -93,13 +88,13 @@ class NLOE2D_analysis():
             print('strain')
             u = self.p['u']
             v = self.p['v']
-                
+
             Length = len(u)
             lapu=np.empty([Length,self.p["Nx"],self.p["Ny"]],dtype=complex) # scalar field (time, y, x), as np is row/column!
             lapv=np.empty([Length,self.p["Nx"],self.p["Ny"]],dtype=complex) # scalar field (time, y, x), as np is row/column!
             lapu3 = np.empty([Length,self.p["Nx"],self.p["Ny"]],dtype=complex) # scalar field (time, y, x), as np is row/column!
             u3 = np.abs(u)**2*u
-            for i in range(len(u)):        
+            for i in range(len(u)):
                 u_scalar=ScalarField(self.p['grid'],u[i,:,:])
                 v_scalar=ScalarField(self.p['grid'],v[i,:,:])
                 u3_scalar = ScalarField(self.p['grid'],np.abs(u[i,:,:])**2*u[i,:,:])
@@ -107,12 +102,12 @@ class NLOE2D_analysis():
                 lapv[i,:,:] = v_scalar.laplace(self.p['BCtype']).data
                 lapu3[i,:,:] = u3_scalar.laplace(self.p['BCtype']).data
             inertia = np.abs((1+1j*self.p['alpha']) * lapu + lapv + lapu3)
+
             self.fielddata['abslapu'] = np.abs(lapu)
             self.fielddata['abslapv'] = np.abs(lapv)
-            self.fielddata['abs(phi|phi|^2)'] = np.abs(lapu3)
-            self.fielddata['inertia'] = inertia
-
-                
+            self.fielddata['abslap(phi|phi|^2)'] = np.abs(lapu3)
+            self.fielddata['inertia'] = np.abs(inertia)
+        
         
         self.fielddata['argu'] = np.angle(u)
         self.fielddata['argv'] = np.angle(v)
@@ -125,13 +120,9 @@ class NLOE2D_analysis():
         self.fielddata['|u|^2'] = self.fielddata['absu']**2
         
         
-        
-        
-        
-        
         self.timeseries['sumabslapu'] = np.sum(np.abs(lapu),axis=(1,2))
         self.timeseries['sumabslapv'] = np.sum(np.abs(lapv),axis=(1,2))
-        self.timeseries['sumabs(phi|phi|^2)'] = np.sum(np.abs(np.abs(u)**2*u),axis=(1,2))
+        self.timeseries['sumabslap(phi|phi|^2)'] = np.sum(np.abs(np.abs(u)**2*u),axis=(1,2))
         self.timeseries['suminertia'] = np.sum(np.abs(inertia),axis=(1,2))
 
 #         corrtime = np.linspace(0,len(u)-1,6).astype(int)
@@ -154,19 +145,22 @@ class NLOE2D_analysis():
             self.fielddata['defectfield'] = np.angle(np.sqrt((self.fielddata['Re(u)']+1j*self.fielddata['Im(u)'])/self.fielddata['absu']))%np.pi
         elif self.p['basis'] == 'displacement':
             self.fielddata['defectfield'] = self.fielddata['argu']
-            
+        print('tracking defects')
         self.track_defects(th=self.fielddata['defectfield'])                
         
-        self.FieldsToPlot = [self.fielddata[f] for f in self.p['Fields to Plot']]   #   [self.u_angle,self.defectMat,self.u_mag]
-        self.SeriesToPlot = [self.timeseries[i] for i in self.p['Timeseries to Plot']]
+        
         
     def get_frame(self,f=-1,save=False):
         self.compute_qties()
+        self.FieldsToPlot = [self.fielddata[f] for f in self.p['Fields to Plot']]
+        self.SeriesToPlot = [self.timeseries[i] for i in self.p['Timeseries to Plot']]        
+            
         plt.rcParams.update({'font.size': 8})
-        self.fig,[fax,sax] = plt.subplots(2,8,figsize=(20,5),dpi=100)  
+        self.fig,[fax1,fax2,sax1,sax2] = plt.subplots(4,4,figsize=(12,16),dpi=100) 
+        fax = np.asarray([fax1,fax2]).flatten()
+        sax = np.asarray([sax1,sax2]).flatten() 
         # self.ims = [ax.imshow(self.FieldsToPlot[n][f],cmap = cmap,aspect='equal') for n,[ax,cmap] in enumerate(zip(axes[0].flatten(),self.p['Colormaps']))]
         self.ims = []
-        nfield = len(self.FieldsToPlot)
         
         for n,[cmap,field,ax,label] in enumerate(zip(self.p['Colormaps'],self.FieldsToPlot,fax,self.p['Fields to Plot'])):
             if n==0:
@@ -184,19 +178,12 @@ class NLOE2D_analysis():
         sax[-1].set_yscale('log')
         for n,[a,tit,series,scale] in enumerate(zip(sax,self.p['Timeseries to Plot'],self.SeriesToPlot,self.p['Timeseries scale'])):
             self.scats.append(a.scatter(t[:3],series[:3],s=5))
-            a.set_xlim([np.min(t[:5]),np.max(t[:5])])
+            a.set_xlim([self.p['pt'],np.max(t[:5])])
             a.set_title(tit)
             a.set_xscale(scale[0])
             a.set_yscale(scale[1]) 
-            
-            
-            
             if n>2:
                 self.scattot.append(sax[-1].scatter(t[:3],series[:3],s=5,label=tit))
-            try:
-                a.set_yscale('log')
-            except UserWarning:
-                pass
         sax[-1].legend()
         
         
@@ -209,7 +196,7 @@ class NLOE2D_analysis():
     
     def AnimateFields(self,savefolder,savefile):
         
-        nfield = len(self.FieldsToPlot)
+        
         if self.p['output_data'] == 'defects':
             print('dataset without field data, cannot generate animation. Set data_output to "all" ')
         else:
@@ -217,7 +204,7 @@ class NLOE2D_analysis():
             fax,sax=self.axes
             
             def update(i):
-                print(i)
+                # print(i)
                 j=0
                 for n,[ax,im,field] in enumerate(zip(fax,self.ims,self.FieldsToPlot)):
                     f = field[i]
@@ -228,17 +215,22 @@ class NLOE2D_analysis():
                         im.set_clim(vmin, vmax)
                 if i>5:
                     t = self.timeseries['times'][:i]
+                    lims=[self.p['pt'],self.p['pt'],0,0]
                     for n,serie in enumerate(self.SeriesToPlot):
                         verts = np.transpose([t,serie[:i]])
                         self.scats[n].set_offsets(verts)
-                        sax[n].set_xlim([np.min(t),np.max(t)])
+                        sax[n].set_xlim([self.p['pt'],np.max(t)])
+
                         sax[n].set_ylim([np.min(serie[:i]),np.max(serie[:i])])
-                        if n>2:
-                            sax[-1].set_xlim([np.min(t),np.max(t)])
-                            sax[-1].set_ylim([np.min(serie[:i]),np.max(serie[:i])])
+
+                        if n>2:    
+                            lims=np.maximum([np.min(t),np.max(t),np.min(serie[:i]),np.max(serie[:i])],lims)
                             verts = np.transpose([t,serie[:i]])
                             self.scattot[j].set_offsets(verts)
                             j+=1
+                    
+                    sax[-1].set_xlim(lims[0],lims[1])
+                    sax[-1].set_ylim(lims[2],lims[3])
                             
                     
                     
@@ -249,7 +241,7 @@ class NLOE2D_analysis():
             anim.save(savefolder+savefile+' - animation.mp4')    
         
     def PlotTimeseries(self,savefolder,savefile):
-        # self.compute_qties()
+
         fig,axes = plt.subplots(2,3,figsize=(18,6))
         ax = axes.flatten()
         t = self.timeseries['times']

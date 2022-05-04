@@ -60,12 +60,11 @@ class NLOE2D_sim():
             data['u'] = u
             data['v'] = v
             data = {**self.p, **data}
-
+            ana = NLOE2D_analysis(data)
+            data = {**data, **ana.timeseries}
             if self.p['output_data']=='defects':
                 data.pop('u', None)
                 data.pop('v', None)
-                ana = NLOE2D_analysis(data)
-                data = {**data, **ana.timeseries}
             pickle.dump(data,output,pickle.HIGHEST_PROTOCOL)
             print('saved as:   ', filename)
             
