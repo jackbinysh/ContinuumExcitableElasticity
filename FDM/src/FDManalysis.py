@@ -124,6 +124,8 @@ class NLOE2D_analysis():
         self.timeseries['sumabslapv'] = np.sum(np.abs(lapv),axis=(1,2))
         self.timeseries['sumabslap(phi|phi|^2)'] = np.sum(np.abs(np.abs(u)**2*u),axis=(1,2))
         self.timeseries['suminertia'] = np.sum(np.abs(inertia),axis=(1,2))
+        self.timeseries['sumoddterm']= np.sum(np.abs(1j*self.p['alpha'] *lapu),axis=(1,2))
+
 
 #         corrtime = np.linspace(0,len(u)-1,6).astype(int)
 #         corr = np.zeros([len(corrtime),np.shape(u)[1],np.shape(u)[2]],dtype=complex)
@@ -156,7 +158,7 @@ class NLOE2D_analysis():
         self.SeriesToPlot = [self.timeseries[i] for i in self.p['Timeseries to Plot']]        
             
         plt.rcParams.update({'font.size': 8})
-        self.fig,[fax1,fax2,sax1,sax2] = plt.subplots(4,4,figsize=(12,16),dpi=100) 
+        self.fig,[fax1,fax2,sax1,sax2] = plt.subplots(4,4,figsize=(14,14),dpi=100) 
         fax = np.asarray([fax1,fax2]).flatten()
         sax = np.asarray([sax1,sax2]).flatten() 
         # self.ims = [ax.imshow(self.FieldsToPlot[n][f],cmap = cmap,aspect='equal') for n,[ax,cmap] in enumerate(zip(axes[0].flatten(),self.p['Colormaps']))]
@@ -182,7 +184,7 @@ class NLOE2D_analysis():
             a.set_title(tit)
             a.set_xscale(scale[0])
             a.set_yscale(scale[1]) 
-            if n>2:
+            if n>1:
                 self.scattot.append(sax[-1].scatter(t[:3],series[:3],s=5,label=tit))
         sax[-1].legend()
         
@@ -204,7 +206,7 @@ class NLOE2D_analysis():
             fax,sax=self.axes
             
             def update(i):
-                # print(i)
+                print(i)
                 j=0
                 for n,[ax,im,field] in enumerate(zip(fax,self.ims,self.FieldsToPlot)):
                     f = field[i]
@@ -223,7 +225,7 @@ class NLOE2D_analysis():
 
                         sax[n].set_ylim([np.min(serie[:i]),np.max(serie[:i])])
 
-                        if n>2:    
+                        if n>1:    
                             lims=np.maximum([np.min(t),np.max(t),np.min(serie[:i]),np.max(serie[:i])],lims)
                             verts = np.transpose([t,serie[:i]])
                             self.scattot[j].set_offsets(verts)

@@ -209,7 +209,7 @@ class NLOE2D_sim():
             ##### Nonlinear odd elasticity, strain formulation 
             rhs[0] = v
             if NL == 'passive_cubic':
-                rhs[1] = (u+1j*alpha*u + v + np.abs(u)**2*u).laplace(bc=self.p['BCtype'])
+                rhs[1] = (u+1j*alpha*u + v + np.abs(u)**4*u).laplace(bc=self.p['BCtype'])
             if NL == 'active_bilinear':
                 thr=1
                 absu_ = np.abs(u.data)
@@ -217,7 +217,7 @@ class NLOE2D_sim():
                 u_[u_>thr]=thr
                 u_unit = u.data/absu_
                 u_NL = u_*u_unit    
-                u_NL = ScalarField(self.grid,u_NL,dtype=complex)
+                u_NL = ScalarField(self.p['grid'],u_NL,dtype=complex)
                 rhs[1] = (u+v+alpha*1j*u_NL).laplace(bc=self.p['BCtype'])
             return rhs
 
@@ -233,7 +233,7 @@ class NLOE2D_sim():
                 rate = np.empty_like(state_data)
                 rate[0] = v
                 if NL == 'passive_cubic':
-                    rate[1] = laplace(u+1j*alpha*u + v + np.abs(u)**2*u)
+                    rate[1] = laplace(u+1j*alpha*u + v + np.abs(u)**4*u)
                 if NL == 'active_bilinear':
                     thr=1
                     absu_ = np.abs(u.flatten())
