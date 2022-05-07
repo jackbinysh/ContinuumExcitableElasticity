@@ -84,7 +84,8 @@ class NLOE2D_analysis():
             u=ux+1j*uy
             v=vx+1j*vy
             
-        if self.p['basis'] == 'strain':
+
+        if self.p['basis'] in ['strain','first order strain']:
             print('strain')
             u = self.p['u']
             v = self.p['v']
@@ -143,7 +144,7 @@ class NLOE2D_analysis():
         self.timeseries['error'] = self.timeseries['momentum']/self.timeseries['energy']
         self.timeseries['times'] = np.arange(self.timeseries['frames'])*self.p['pt']
 
-        if self.p['basis'] == 'strain':
+        if self.p['basis'] in ['strain','first order strain']:
             self.fielddata['defectfield'] = np.angle(np.sqrt((self.fielddata['Re(u)']+1j*self.fielddata['Im(u)'])/self.fielddata['absu']))%np.pi
         elif self.p['basis'] == 'displacement':
             self.fielddata['defectfield'] = self.fielddata['argu']
@@ -222,18 +223,21 @@ class NLOE2D_analysis():
                         verts = np.transpose([t,serie[:i]])
                         self.scats[n].set_offsets(verts)
                         sax[n].set_xlim([self.p['pt'],np.max(t)])
-
-                        sax[n].set_ylim([np.min(serie[:i]),np.max(serie[:i])])
-
+                        try:
+                            sax[n].set_ylim([np.min([0.001,*serie[:i]]),np.max(serie[:i])])
+                        except:
+                            pass
                         if n>1:    
                             lims=np.maximum([np.min(t),np.max(t),np.min(serie[:i]),np.max(serie[:i])],lims)
                             verts = np.transpose([t,serie[:i]])
                             self.scattot[j].set_offsets(verts)
                             j+=1
                     
-                    sax[-1].set_xlim(lims[0],lims[1])
-                    sax[-1].set_ylim(lims[2],lims[3])
-                            
+                    try:
+                        sax[-1].set_xlim(lims[0],lims[1])
+                        sax[-1].set_ylim(lims[2],lims[3])
+                    except:
+                        pass    
                     
                     
             anim = animation.FuncAnimation(self.fig, update, 

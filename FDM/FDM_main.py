@@ -9,17 +9,17 @@ import matplotlib.cm as cm
       
     
 parameters = {#time
-              'tf':50, #total time
-              'pt':0.3, #print interval
-              'dt':4e-5,#integration step
+              'tf':5000, #total time
+              'pt':50, #print interval
+              'dt':4e-4,#integration step
               
               #system parameters
               'alpha':10,#activity
               'B': 0, #model parameter for displacement formulation: bulk modulus
               'Lx':50,#boxsize
               'Ly':50,#boxsize
-              'basis': 'strain', #'dislacement' or 'strain'
-              'NL':'active_bilinear',#NL type: choose 'passive_cubic' or 'active_bilinear'(strain only)
+              'basis': 'first order strain', #'dislacement' or 'strain'
+              'NL':'passive_cubic',#NL type: choose 'passive_cubic' or 'active_bilinear'(strain only)
               
               #Domain
               'Nx':100,#spatial discretization
@@ -35,7 +35,7 @@ parameters = {#time
               
               #saving/loading/plotting
               'datafolder': 'datasets/',
-              'subfolder': 'experiment1/',
+              'subfolder': 'first order/',
               'subsubfolder': 'alpha = 300/',
               
             #   'savefolder':'datasets/run1/',#folder for 

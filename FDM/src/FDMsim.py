@@ -29,6 +29,7 @@ class NLOE2D_sim():
         for n,i in enumerate(self.init):
             self.init[n] = i - np.average(i)
         
+        
     def runsim(self):
         storage = MemoryStorage()
         trackers = ['progress'    , 'consistency'  ,     storage.tracker(interval=self.p['pt']) ]
@@ -41,7 +42,10 @@ class NLOE2D_sim():
             print('running strain simulation')
             self.init=FieldCollection([ScalarField(self.grid,np.vectorize(complex)(*self.init[:2]),dtype=complex),ScalarField(self.grid,np.vectorize(complex)(*self.init[2:]),dtype=complex)])            
             eq=self.Strain(self.p,self.init)
-
+        elif self.p['basis']=='first order strain':
+            print('running first order strain simulation')
+            self.init=ScalarField(self.grid,np.vectorize(complex)(*self.init[:2]),dtype=complex)
+            eq=self.FirstOrderStrain(self.p,self.init)
         sol = eq.solve(self.init, t_range=self.p['tf'],tracker=trackers,dt=self.p['dt'])        
         filename = self.p['datafolder'] + self.p['subfolder']+self.p['subsubfolder']+self.p['basis'] + ' - ' + self.p['savefile']
         if not os.path.exists(self.p['datafolder'] + self.p['subfolder']+self.p['subsubfolder']):
@@ -57,8 +61,13 @@ class NLOE2D_sim():
                 v = field[2:]
             elif self.p['basis']=='strain':
                 u,v=np.moveaxis(np.asarray(field),0,1)
+            elif self.p['basis']=='first order strain':
+                u=np.asarray(field)
             data['u'] = u
-            data['v'] = v
+            if self.p['basis']!='first order strain':
+                data['v'] = v
+            else:
+                data['v'] = np.zeros_like(u)
             data = {**self.p, **data}
             ana = NLOE2D_analysis(data)
             data = {**data, **ana.timeseries}
@@ -245,7 +254,37 @@ class NLOE2D_sim():
                     rate[1] = laplace(u+v+alpha*1j*u_NL)
                 return rate
             return pde_rhs
+
+    class FirstOrderStrain(PDEBase):
+        def __init__(self,p,state):
+            self.p=p
+            self.init=state
+
+        def evolution_rate(self, state, t=0):
+            alpha,NL = self.p['alpha'],self.p['NL']
+            u = state
+            rhs = state.copy()
+            ##### Nonlinear odd elasticity, strain formulation 
+            rhs = (u + np.abs(u)**2*u).laplace(bc=self.p['BCtype'])/(1j*alpha)
+            return rhs
+
+        def _make_pde_rhs_numba(self, state):
+            #### This part is to speed up things ####
+            """ numba-compiled implementation of the PDE """
+            alpha,NL,Nx,Ny = self.p['alpha'],self.p['NL'],self.p['Nx'],self.p['Ny']
+            laplace = state.grid.get_operator("laplace", bc =self.p['BCtype'])
+            @nb.jit
+            def pde_rhs(state_data, t):
+                u = state_data
+                rate = np.empty_like(state_data)
+                rate = laplace(u + np.abs(u)**2*u)/(1j*alpha)
+                return rate
+            return pde_rhs
         
+
+
+
+
 
 
 
