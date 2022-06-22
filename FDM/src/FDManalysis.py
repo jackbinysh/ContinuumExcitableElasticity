@@ -7,6 +7,7 @@ import matplotlib.animation as animation
 import matplotlib.cm as cm
 from scipy import signal
 from pde import ScalarField,VectorField
+Writer = animation.writers['ffmpeg']
 class NLOE2D_analysis():
     def __init__(self,path,plotparams={}):
         self.timeseries={}
@@ -75,8 +76,71 @@ class NLOE2D_analysis():
         self.timeseries['N_t'] = N_t
         self.timeseries['Q_t'] = Q_t
 
+    def get_correlation(self,th):
+        Nx = self.p['Nx']
+        Ny = self.p['Ny']
+        
+        
 
+        th = self.fielddata['ang_pc']
+
+        corrtime = self.timeseries['times']
+        corr = np.zeros([len(corrtime),np.shape(th)[1],np.shape(th)[2]],dtype=float)
+        R = np.zeros([np.shape(th)[1],np.shape(th)[2]])
+
+        
+        for n,t in enumerate(corrtime):
+            print(n)
+            for x in range(Nx):
+                for y in range(Ny):
+                    dth = th[n,:,:] - np.roll(th[n,:,:],(x,y),axis=(0,1))
+                    proj = np.real(np.exp(1j*dth))
+                    corr_xy = np.average(proj)
+                    corr[n,x,y] = corr_xy
+                    
+                    if n==0:
+                        A = np.min([np.sqrt(x**2+y**2),
+                                        np.sqrt((x-Nx)**2+(y-Ny)**2),
+                                        np.sqrt((x-Nx)**2+y**2),
+                                        np.sqrt(x**2+(y-Ny)**2)])
+                        R[x,y] = A
+                        
+                        
+        
+        self.fielddata['correlation'] = corr
+        # 
+        # 
+        # R = np.reshape(R,Nx*Ny)
+        # Rinds = R.argsort()
+        # R = R[Rinds[::-1]]        
+        # corr = np.reshape(corr,(Nt,Nx*Ny))
+        # 
+        # for t,c in enumerate(corr):
+        #     corr[t] = c[Rinds[::-1]]
+        #         
+        # def avg_group(vA0, vB0):
+        #     vA, ind, counts = np.unique(vA0, return_index=True, return_counts=True) # get unique values in vA0
+        #     vB = vB0[ind]
+        #     for dup in vB[counts>1]: # store the average (one may change as wished) of original elements in vA0 reference by the unique elements in vB
+        #         vB[np.where(vA==dup)] = np.average(vB0[np.where(vA0==dup)])
+        #     return vA, vB
+        # 
+        # Ct=[]
+        # for t in range(Nt):
+        #     R,C = avg_group(R,corr[t])            
+        #     Ct.append(C)
+
+           
+
+
+        
+        
+        
+        
+        
     def compute_qties(self):
+        Nx = self.p['Nx']
+        Ny = self.p['Nx']
         if self.p['basis'] == 'displacement':
             print('displacement')
             ux,uy=self.p['u']
@@ -91,9 +155,9 @@ class NLOE2D_analysis():
             v = self.p['v']
 
             Length = len(u)
-            lapu=np.empty([Length,self.p["Nx"],self.p["Ny"]],dtype=complex) # scalar field (time, y, x), as np is row/column!
-            lapv=np.empty([Length,self.p["Nx"],self.p["Ny"]],dtype=complex) # scalar field (time, y, x), as np is row/column!
-            lapu3 = np.empty([Length,self.p["Nx"],self.p["Ny"]],dtype=complex) # scalar field (time, y, x), as np is row/column!
+            lapu=np.empty([Length,Nx,Ny],dtype=complex) # scalar field (time, y, x), as np is row/column!
+            lapv=np.empty([Length,Nx,Ny],dtype=complex) # scalar field (time, y, x), as np is row/column!
+            lapu3 = np.empty([Length,Nx,Ny],dtype=complex) # scalar field (time, y, x), as np is row/column!
             u3 = np.abs(u)**2*u
             for i in range(len(u)):
                 u_scalar=ScalarField(self.p['grid'],u[i,:,:])
@@ -127,17 +191,6 @@ class NLOE2D_analysis():
         self.timeseries['suminertia'] = np.sum(np.abs(inertia),axis=(1,2))
         self.timeseries['sumoddterm']= np.sum(np.abs(1j*self.p['alpha'] *lapu),axis=(1,2))
 
-
-#         corrtime = np.linspace(0,len(u)-1,6).astype(int)
-#         corr = np.zeros([len(corrtime),np.shape(u)[1],np.shape(u)[2]],dtype=complex)
-#         for n,t in enumerate(corrtime):
-#             for x in range(self.p['Nx']):
-#                 for y in range(self.p['Ny']):
-#                     corr[n,x,y] = np.average(signal.correlate(u[t,:,:],np.roll(u[t,:,:],(x,y))),axis=(0,1))
-# 
-#         self.timeseries['correlation'] = corr        
-
-
         self.timeseries['frames'] = len(u)
         self.timeseries['momentum'] = np.abs(np.sum(u,axis=(1,2)))**2
         self.timeseries['energy'] = np.sum(self.fielddata['|u|^2'],axis=(1,2))
@@ -145,11 +198,20 @@ class NLOE2D_analysis():
         self.timeseries['times'] = np.arange(self.timeseries['frames'])*self.p['pt']
 
         if self.p['basis'] in ['strain','first order strain']:
-            self.fielddata['defectfield'] = np.angle(np.sqrt((self.fielddata['Re(u)']+1j*self.fielddata['Im(u)'])/self.fielddata['absu']))%np.pi
+            self.fielddata['ang_pc'] = np.angle(np.sqrt((self.fielddata['Re(u)']+1j*self.fielddata['Im(u)'])/self.fielddata['absu']))%np.pi
         elif self.p['basis'] == 'displacement':
-            self.fielddata['defectfield'] = self.fielddata['argu']
-        print('tracking defects')
-        self.track_defects(th=self.fielddata['defectfield'])                
+            self.fielddata['ang_pc'] = self.fielddata['argu']
+        
+        self.track_defects(th=self.fielddata['ang_pc'])
+        self.get_correlation(th=self.fielddata['ang_pc'])
+        
+        
+        
+        
+        
+        
+        
+        
         
         
         
@@ -224,7 +286,7 @@ class NLOE2D_analysis():
                         self.scats[n].set_offsets(verts)
                         sax[n].set_xlim([self.p['pt'],np.max(t)])
                         try:
-                            sax[n].set_ylim([np.min([0.001,*serie[:i]]),np.max(serie[:i])])
+                            sax[n].set_ylim([np.min([0.1,*serie[:i]]),np.max(serie[:i])])
                         except:
                             pass
                         if n>1:    

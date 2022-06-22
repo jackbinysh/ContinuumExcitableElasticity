@@ -30,6 +30,7 @@ class NLOE2D_sim():
             self.init[n] = i - np.average(i)
         
         
+        
     def runsim(self):
         storage = MemoryStorage()
         trackers = ['progress'    , 'consistency'  ,     storage.tracker(interval=self.p['pt']) ]
@@ -69,9 +70,10 @@ class NLOE2D_sim():
             else:
                 data['v'] = np.zeros_like(u)
             data = {**self.p, **data}
-            ana = NLOE2D_analysis(data)
-            data = {**data, **ana.timeseries}
+            
             if self.p['output_data']=='defects':
+                ana = NLOE2D_analysis(data)
+                data = {**data, **ana.timeseries}
                 data.pop('u', None)
                 data.pop('v', None)
             pickle.dump(data,output,pickle.HIGHEST_PROTOCOL)
@@ -218,7 +220,7 @@ class NLOE2D_sim():
             ##### Nonlinear odd elasticity, strain formulation 
             rhs[0] = v
             if NL == 'passive_cubic':
-                rhs[1] = (u+1j*alpha*u + v + np.abs(u)**4*u).laplace(bc=self.p['BCtype'])
+                rhs[1] = (u+1j*alpha*u + v + np.abs(u)**2*u).laplace(bc=self.p['BCtype'])
             if NL == 'active_bilinear':
                 thr=1
                 absu_ = np.abs(u.data)
@@ -242,7 +244,7 @@ class NLOE2D_sim():
                 rate = np.empty_like(state_data)
                 rate[0] = v
                 if NL == 'passive_cubic':
-                    rate[1] = laplace(u+1j*alpha*u + v + np.abs(u)**4*u)
+                    rate[1] = laplace(u+1j*alpha*u + v + np.abs(u)**2*u)
                 if NL == 'active_bilinear':
                     thr=1
                     absu_ = np.abs(u.flatten())

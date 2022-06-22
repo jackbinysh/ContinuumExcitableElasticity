@@ -9,21 +9,21 @@ import matplotlib.cm as cm
       
     
 parameters = {#time
-              'tf':5000, #total time
-              'pt':50, #print interval
-              'dt':4e-4,#integration step
+              'tf':2, #total time
+              'pt':0.005, #print interval
+              'dt':5e-6,#integration step
               
               #system parameters
-              'alpha':10,#activity
+              'alpha':200,#activity
               'B': 0, #model parameter for displacement formulation: bulk modulus
-              'Lx':50,#boxsize
-              'Ly':50,#boxsize
-              'basis': 'first order strain', #'dislacement' or 'strain'
+              'Lx':5,#boxsize
+              'Ly':5,#boxsize
+              'basis': 'strain', #'dislacement' or 'strain'
               'NL':'passive_cubic',#NL type: choose 'passive_cubic' or 'active_bilinear'(strain only)
               
               #Domain
-              'Nx':100,#spatial discretization
-              'Ny':100,#spatial discretization
+              'Nx':201,#spatial discretization
+              'Ny':201,#spatial discretization
               'BC':[True,True], #Boundary conditions in x and y directions, True = periodical 
               'BCtype': 'auto_periodic_neumann',
               
@@ -35,20 +35,20 @@ parameters = {#time
               
               #saving/loading/plotting
               'datafolder': 'datasets/',
-              'subfolder': 'first order/',
+              'subfolder': 'passive NL/',
               'subsubfolder': 'alpha = 300/',
               
             #   'savefolder':'datasets/run1/',#folder for 
             #   'subfolder': 'alpha = 600/',#subfolder parameter value
 
-              'savefile':'quintic', #filename of pickle data file
+              'savefile':'passive NL', #filename of pickle data file
               'outputfolder': 'output/',#folder for plots/animations
               'output_data':'all',#'all' for full timeseries, 'defects' for defect data only
 }
-parameters['savefile'] = f'a={parameters["alpha"]},L={parameters["Lx"]},{parameters["Ly"]},periodic bilinear odd'
+parameters['savefile'] = f'a={parameters["alpha"]},L={parameters["Lx"]},{parameters["Ly"]}, {parameters["savefile"]}'
 
-plotparams=  {'Fields to Plot': ['argu','defectfield','absu','abslapu','abslapv','abslap(phi|phi|^2)','inertia'],
-              'Colormaps': ['hsv','RdBu','viridis','viridis','viridis','viridis','viridis'],            #colormaps for those fields
+plotparams=  {'Fields to Plot': ['argu','defectfield','absu','abslapu','abslapv','abslap(phi|phi|^2)','inertia','correlation'],
+              'Colormaps': ['hsv','RdBu','viridis','viridis','viridis','viridis','viridis','RdBu'],            #colormaps for those fields
               'Timeseries to Plot':['energy','N_t','sumoddterm','sumabslapu','sumabslapv','sumabslap(phi|phi|^2)','suminertia'], #fields to animat
               'Timeseries scale':[['linear','log'],['log','log'],['linear','log'],['linear','log'],['linear','log'],['linear','log'],['linear','log']]
               }
@@ -134,7 +134,3 @@ ana.AnimateFields(savefolder,savefile)
 
 
 
-
-
-
-# %%
